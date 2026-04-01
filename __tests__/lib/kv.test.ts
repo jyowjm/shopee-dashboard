@@ -1,15 +1,4 @@
-jest.mock('@vercel/kv', () => ({
-  kv: {
-    set: jest.fn(),
-    get: jest.fn(),
-  },
-}));
-
-import { kv } from '@vercel/kv';
-import { saveTokens, loadTokens } from '@/lib/kv';
 import type { ShopeeTokens } from '@/types/shopee';
-
-const mockKv = kv as jest.Mocked<typeof kv>;
 
 const sampleTokens: ShopeeTokens = {
   access_token: 'acc_123',
@@ -19,22 +8,49 @@ const sampleTokens: ShopeeTokens = {
 };
 
 describe('saveTokens()', () => {
-  it('saves tokens to KV under key "shopee_tokens"', async () => {
-    mockKv.set.mockResolvedValue('OK');
+  const mockSet = jest.fn();
+  const mockGet = jest.fn();
+
+  beforeEach(() => {
+    jest.resetModules();
+    jest.doMock('@upstash/redis', () => ({
+      Redis: jest.fn().mockReturnValue({ set: mockSet, get: mockGet }),
+    }));
+    mockSet.mockReset();
+    mockGet.mockReset();
+  });
+
+  it('saves tokens under key "shopee_tokens"', async () => {
+    const { saveTokens } = await import('@/lib/kv');
+    mockSet.mockResolvedValue('OK');
     await saveTokens(sampleTokens);
-    expect(mockKv.set).toHaveBeenCalledWith('shopee_tokens', sampleTokens);
+    expect(mockSet).toHaveBeenCalledWith('shopee_tokens', sampleTokens);
   });
 });
 
 describe('loadTokens()', () => {
+  const mockSet = jest.fn();
+  const mockGet = jest.fn();
+
+  beforeEach(() => {
+    jest.resetModules();
+    jest.doMock('@upstash/redis', () => ({
+      Redis: jest.fn().mockReturnValue({ set: mockSet, get: mockGet }),
+    }));
+    mockSet.mockReset();
+    mockGet.mockReset();
+  });
+
   it('returns tokens when they exist in KV', async () => {
-    mockKv.get.mockResolvedValue(sampleTokens);
+    const { loadTokens } = await import('@/lib/kv');
+    mockGet.mockResolvedValue(sampleTokens);
     const result = await loadTokens();
     expect(result).toEqual(sampleTokens);
   });
 
   it('returns null when no tokens exist', async () => {
-    mockKv.get.mockResolvedValue(null);
+    const { loadTokens } = await import('@/lib/kv');
+    mockGet.mockResolvedValue(null);
     const result = await loadTokens();
     expect(result).toBeNull();
   });
