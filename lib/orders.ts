@@ -30,6 +30,7 @@ export async function fetchOrderSummaries(
           time_from: chunk.from,
           time_to: chunk.to,
           page_size: 100,
+          response_optional_fields: 'order_status',
           ...(cursor ? { cursor } : {}),
         }
       );
