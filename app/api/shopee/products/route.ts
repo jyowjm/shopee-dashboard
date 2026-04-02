@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { callShopee } from '@/lib/shopee';
+import { fetchOrderSummaries } from '@/lib/orders';
 import { aggregateProducts } from './helpers';
-import type { ShopeeOrderSummary, ShopeeOrderDetail, ShopeeApiError } from '@/types/shopee';
+import type { ShopeeOrderDetail, ShopeeApiError } from '@/types/shopee';
 
-const ORDER_CAP = 500;
 const BATCH_SIZE = 50;
 
 export async function GET(req: NextRequest) {
@@ -16,27 +16,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Missing from/to params' }, { status: 400 });
     }
 
-    const orders: ShopeeOrderSummary[] = [];
-    let cursor = '';
-    let more = true;
-
-    while (more && orders.length < ORDER_CAP) {
-      const data = await callShopee<{ order_list: ShopeeOrderSummary[]; more: boolean; next_cursor: string }>(
-        '/api/v2/order/get_order_list',
-        {
-          time_range_field: 'create_time',
-          time_from: from,
-          time_to: to,
-          page_size: 100,
-          ...(cursor ? { cursor } : {}),
-        }
-      );
-      orders.push(...(data.order_list ?? []));
-      more = data.more;
-      cursor = data.next_cursor ?? '';
-    }
-
-    const sns = orders.slice(0, ORDER_CAP).map(o => o.order_sn);
+    const { orders } = await fetchOrderSummaries(from, to);
+    const sns = orders.map(o => o.order_sn);
     const details: ShopeeOrderDetail[] = [];
     for (let i = 0; i < sns.length; i += BATCH_SIZE) {
       const batch = sns.slice(i, i + BATCH_SIZE);

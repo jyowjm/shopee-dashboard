@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { callShopee } from '@/lib/shopee';
+import { fetchOrderSummaries } from '@/lib/orders';
 import { aggregateOrders } from './helpers';
-import type { ShopeeOrderSummary, ShopeeApiError } from '@/types/shopee';
+import type { ShopeeApiError } from '@/types/shopee';
 
 export async function GET(req: NextRequest) {
   try {
@@ -13,26 +13,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Missing from/to params' }, { status: 400 });
     }
 
-    const orders: ShopeeOrderSummary[] = [];
-    let cursor = '';
-    let more = true;
-
-    while (more) {
-      const data = await callShopee<{ order_list: ShopeeOrderSummary[]; more: boolean; next_cursor: string }>(
-        '/api/v2/order/get_order_list',
-        {
-          time_range_field: 'create_time',
-          time_from: from,
-          time_to: to,
-          page_size: 100,
-          ...(cursor ? { cursor } : {}),
-        }
-      );
-      orders.push(...(data.order_list ?? []));
-      more = data.more;
-      cursor = data.next_cursor ?? '';
-    }
-
+    const { orders } = await fetchOrderSummaries(from, to);
     return NextResponse.json(aggregateOrders(orders));
   } catch (err) {
     const e = err as ShopeeApiError;

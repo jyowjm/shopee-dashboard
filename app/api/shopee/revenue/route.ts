@@ -1,35 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { callShopee } from '@/lib/shopee';
+import { fetchOrderSummaries } from '@/lib/orders';
 import { aggregateRevenue } from './helpers';
-import type { ShopeeOrderSummary, ShopeeOrderDetail, ShopeeApiError } from '@/types/shopee';
+import type { ShopeeOrderDetail, ShopeeApiError } from '@/types/shopee';
 
-const ORDER_CAP = 500;
 const BATCH_SIZE = 50;
-
-async function fetchAllOrders(from: number, to: number): Promise<{ orders: ShopeeOrderSummary[]; capped: boolean }> {
-  const orders: ShopeeOrderSummary[] = [];
-  let cursor = '';
-  let more = true;
-
-  while (more && orders.length < ORDER_CAP) {
-    const data = await callShopee<{ order_list: ShopeeOrderSummary[]; more: boolean; next_cursor: string }>(
-      '/api/v2/order/get_order_list',
-      {
-        time_range_field: 'create_time',
-        time_from: from,
-        time_to: to,
-        page_size: 100,
-        ...(cursor ? { cursor } : {}),
-      }
-    );
-    orders.push(...(data.order_list ?? []));
-    more = data.more;
-    cursor = data.next_cursor ?? '';
-  }
-
-  const capped = orders.length >= ORDER_CAP;
-  return { orders: orders.slice(0, ORDER_CAP), capped };
-}
 
 async function fetchOrderDetails(orderSns: string[]): Promise<ShopeeOrderDetail[]> {
   const details: ShopeeOrderDetail[] = [];
@@ -57,7 +32,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Missing from/to params' }, { status: 400 });
     }
 
-    const { orders, capped } = await fetchAllOrders(from, to);
+    const { orders, capped } = await fetchOrderSummaries(from, to);
     const details = await fetchOrderDetails(orders.map(o => o.order_sn));
     const result = aggregateRevenue(details);
 
