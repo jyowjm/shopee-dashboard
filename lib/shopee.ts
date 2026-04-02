@@ -112,5 +112,5 @@ export async function callShopee<T>(
     throw err;
   }
 
-  return data as T;
+  return (data.response ?? data) as T;
 }
