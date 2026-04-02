@@ -4,20 +4,18 @@ import type { ShopeeApiError } from '@/types/shopee';
 
 export async function GET() {
   try {
-    const [shopInfo, performance] = await Promise.all([
-      callShopee<{
-        shop_name: string;
-        shop_logo: string;
-        rating_star: number;
-      }>('/api/v2/shop/get_shop_info', {}),
-      callShopee<{
-        overall_performance: {
-          cancellation_rate: { rate: number };
-          response_rate: { rate: number };
-          late_shipment_rate: { rate: number };
-        };
-      }>('/api/v2/shop/get_shop_performance', {}),
-    ]);
+    const shopInfo = await callShopee<{
+      shop_name: string;
+      shop_logo: string;
+      rating_star: number;
+    }>('/api/v2/shop/get_shop_info', {});
+
+    let performance: { overall_performance?: { cancellation_rate?: { rate: number }; response_rate?: { rate: number }; late_shipment_rate?: { rate: number } } } = {};
+    try {
+      performance = await callShopee('/api/v2/shop/get_shop_performance', {});
+    } catch {
+      // performance data unavailable (e.g. sandbox)
+    }
 
     return NextResponse.json({
       shop_name: shopInfo.shop_name,

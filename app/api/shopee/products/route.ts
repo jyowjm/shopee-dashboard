@@ -29,7 +29,6 @@ export async function GET(req: NextRequest) {
           time_to: to,
           page_size: 100,
           ...(cursor ? { cursor } : {}),
-          order_status: 'ALL',
         }
       );
       orders.push(...(data.order_list ?? []));
