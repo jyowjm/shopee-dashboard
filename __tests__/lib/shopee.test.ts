@@ -42,7 +42,7 @@ describe('getBaseUrl()', () => {
   afterEach(() => { process.env.SHOPEE_ENV = original; });
   it('returns sandbox URL when SHOPEE_ENV is sandbox', () => {
     process.env.SHOPEE_ENV = 'sandbox';
-    expect(getBaseUrl()).toBe('https://partner.test-stable.shopeemobile.com');
+    expect(getBaseUrl()).toBe('https://openplatform.sandbox.test-stable.shopee.sg');
   });
   it('returns production URL when SHOPEE_ENV is production', () => {
     process.env.SHOPEE_ENV = 'production';

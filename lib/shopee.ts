@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { loadTokens, saveTokens } from '@/lib/kv';
 import type { ShopeeTokens, ShopeeApiError } from '@/types/shopee';
 
-const SANDBOX_BASE = 'https://partner.test-stable.shopeemobile.com';
+const SANDBOX_BASE = 'https://openplatform.sandbox.test-stable.shopee.sg';
 const PROD_BASE = 'https://partner.shopeemobile.com';
 
 export function getBaseUrl(): string {
