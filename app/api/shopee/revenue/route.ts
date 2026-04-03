@@ -52,7 +52,8 @@ export async function GET(req: NextRequest) {
     }
 
     const { orders, capped } = await fetchOrderSummaries(from, to);
-    const details = await fetchOrderDetails(orders.map(o => o.order_sn));
+    const activeOrders = orders.filter(o => !['CANCELLED', 'IN_CANCEL'].includes(o.order_status));
+    const details = await fetchOrderDetails(activeOrders.map(o => o.order_sn));
     const sellerVouchers = await fetchSellerVouchers(details.map(d => d.order_sn));
 
     // Merge escrow voucher data into order details
