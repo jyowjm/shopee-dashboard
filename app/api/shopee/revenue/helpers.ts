@@ -2,10 +2,11 @@ import { format } from 'date-fns';
 import type { ShopeeOrderDetail, RevenueData } from '@/types/shopee';
 
 function itemRevenue(order: ShopeeOrderDetail): number {
-  return (order.item_list ?? []).reduce(
+  const itemsTotal = (order.item_list ?? []).reduce(
     (sum, item) => sum + item.model_discounted_price * item.model_quantity_purchased,
     0
   );
+  return itemsTotal - (order.voucher_from_seller ?? 0);
 }
 
 export function aggregateRevenue(orders: ShopeeOrderDetail[]): RevenueData {

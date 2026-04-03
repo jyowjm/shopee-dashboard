@@ -43,6 +43,7 @@ export interface ShopeeOrderDetail {
   order_sn: string;
   order_status: string;
   total_amount: number;
+  voucher_from_seller: number; // seller-funded voucher deducted from order
   create_time: number; // Unix seconds
   item_list: {
     item_id: number;
