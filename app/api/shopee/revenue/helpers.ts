@@ -1,12 +1,19 @@
 import { format } from 'date-fns';
 import type { ShopeeOrderDetail, RevenueData } from '@/types/shopee';
 
+function itemRevenue(order: ShopeeOrderDetail): number {
+  return (order.item_list ?? []).reduce(
+    (sum, item) => sum + item.model_discounted_price * item.model_quantity_purchased,
+    0
+  );
+}
+
 export function aggregateRevenue(orders: ShopeeOrderDetail[]): RevenueData {
   const dailyMap = new Map<string, number>();
 
   for (const order of orders) {
     const date = format(new Date(order.create_time * 1000), 'yyyy-MM-dd');
-    dailyMap.set(date, (dailyMap.get(date) ?? 0) + order.total_amount);
+    dailyMap.set(date, (dailyMap.get(date) ?? 0) + itemRevenue(order));
   }
 
   const daily = Array.from(dailyMap.entries())
@@ -18,12 +25,12 @@ export function aggregateRevenue(orders: ShopeeOrderDetail[]): RevenueData {
       order_sn: o.order_sn,
       date: format(new Date(o.create_time * 1000), 'yyyy-MM-dd'),
       status: o.order_status,
-      amount: o.total_amount,
+      amount: itemRevenue(o),
     }))
     .sort((a, b) => b.date.localeCompare(a.date));
 
   return {
-    total_revenue: orders.reduce((sum, o) => sum + o.total_amount, 0),
+    total_revenue: orders.reduce((sum, o) => sum + itemRevenue(o), 0),
     order_count: orders.length,
     daily,
     orders: orderRows,
