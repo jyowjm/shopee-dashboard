@@ -82,7 +82,7 @@ export default function ProductsSection({ dateRange, refreshKey }: Props) {
                 <td className="py-2 text-gray-400">{i + 1}</td>
                 <td className="py-2 text-gray-800 max-w-xs truncate">{p.name}</td>
                 <td className="py-2 text-right text-gray-600">{p.units_sold}</td>
-                <td className="py-2 text-right font-medium">${p.revenue.toFixed(2)}</td>
+                <td className="py-2 text-right font-medium">RM {p.revenue.toFixed(2)}</td>
               </tr>
             ))}
           </tbody>

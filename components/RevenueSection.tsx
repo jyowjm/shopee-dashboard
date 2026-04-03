@@ -48,7 +48,7 @@ export default function RevenueSection({ dateRange, refreshKey }: Props) {
       )}
       <div className="flex gap-8 mb-6">
         <div>
-          <p className="text-3xl font-bold text-gray-900">${data?.total_revenue.toFixed(2)}</p>
+          <p className="text-3xl font-bold text-gray-900">RM {data?.total_revenue.toFixed(2)}</p>
           <p className="text-sm text-gray-500 mt-1">Total revenue</p>
         </div>
         <div>
@@ -60,8 +60,8 @@ export default function RevenueSection({ dateRange, refreshKey }: Props) {
         <LineChart data={data?.daily ?? []}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
           <XAxis dataKey="date" tick={{ fontSize: 12 }} tickFormatter={d => format(new Date(d), 'MMM d')} />
-          <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${v}`} />
-          <Tooltip formatter={(v: unknown) => [`$${(v as number).toFixed(2)}`, 'Revenue']} labelFormatter={l => format(new Date(l as string), 'MMM d, yyyy')} />
+          <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `RM ${v}`} />
+          <Tooltip formatter={(v: unknown) => [`RM ${(v as number).toFixed(2)}`, 'Revenue']} labelFormatter={l => format(new Date(l as string), 'MMM d, yyyy')} />
           <Line type="monotone" dataKey="revenue" stroke="#f97316" strokeWidth={2} dot={false} />
         </LineChart>
       </ResponsiveContainer>
