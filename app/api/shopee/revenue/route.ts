@@ -14,12 +14,31 @@ async function fetchOrderDetails(orderSns: string[]): Promise<ShopeeOrderDetail[
       '/api/v2/order/get_order_detail',
       {
         order_sn_list: batch.join(','),
-        response_optional_fields: 'item_list,total_amount,order_status,voucher_from_seller',
+        response_optional_fields: 'item_list,total_amount,order_status',
       }
     );
     details.push(...(data.order_list ?? []));
   }
   return details;
+}
+
+// Fetch seller voucher amounts from escrow endpoint (one call per order)
+async function fetchSellerVouchers(orderSns: string[]): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  await Promise.all(
+    orderSns.map(async (sn) => {
+      try {
+        const data = await callShopee<{ order_income: { voucher_from_seller: number } }>(
+          '/api/v2/payment/get_escrow_detail',
+          { order_sn: sn }
+        );
+        map.set(sn, data.order_income?.voucher_from_seller ?? 0);
+      } catch {
+        map.set(sn, 0);
+      }
+    })
+  );
+  return map;
 }
 
 export async function GET(req: NextRequest) {
@@ -34,7 +53,15 @@ export async function GET(req: NextRequest) {
 
     const { orders, capped } = await fetchOrderSummaries(from, to);
     const details = await fetchOrderDetails(orders.map(o => o.order_sn));
-    const result = aggregateRevenue(details);
+    const sellerVouchers = await fetchSellerVouchers(details.map(d => d.order_sn));
+
+    // Merge escrow voucher data into order details
+    const detailsWithVouchers = details.map(d => ({
+      ...d,
+      voucher_from_seller: sellerVouchers.get(d.order_sn) ?? 0,
+    }));
+
+    const result = aggregateRevenue(detailsWithVouchers);
 
     return NextResponse.json({ ...result, capped });
   } catch (err) {
