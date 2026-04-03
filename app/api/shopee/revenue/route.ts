@@ -14,7 +14,7 @@ async function fetchOrderDetails(orderSns: string[]): Promise<ShopeeOrderDetail[
       '/api/v2/order/get_order_detail',
       {
         order_sn_list: batch.join(','),
-        response_optional_fields: 'item_list,total_amount',
+        response_optional_fields: 'item_list,total_amount,order_status',
       }
     );
     details.push(...(data.order_list ?? []));

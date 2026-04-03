@@ -6,6 +6,17 @@ import { format } from 'date-fns';
 import type { DateRange } from './TimeFilter';
 import type { RevenueData } from '@/types/shopee';
 
+const STATUS_COLORS: Record<string, string> = {
+  COMPLETED: 'text-green-600',
+  SHIPPED: 'text-blue-600',
+  READY_TO_SHIP: 'text-purple-600',
+  PAID: 'text-orange-500',
+  CANCELLED: 'text-red-500',
+  IN_CANCEL: 'text-amber-500',
+  TO_RETURN: 'text-pink-500',
+  UNPAID: 'text-gray-400',
+};
+
 interface Props {
   dateRange: DateRange;
   refreshKey: number;
@@ -65,6 +76,41 @@ export default function RevenueSection({ dateRange, refreshKey }: Props) {
           <Line type="monotone" dataKey="revenue" stroke="#f97316" strokeWidth={2} dot={false} />
         </LineChart>
       </ResponsiveContainer>
+
+      {/* Per-order breakdown */}
+      {(data?.orders?.length ?? 0) > 0 && (
+        <div className="mt-6 border-t border-gray-100 pt-4">
+          <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Revenue per Order</h3>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-gray-500 border-b border-gray-100">
+                <th className="pb-2 font-medium">Order</th>
+                <th className="pb-2 font-medium">Date</th>
+                <th className="pb-2 font-medium">Status</th>
+                <th className="pb-2 font-medium text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data!.orders.map(o => (
+                <tr key={o.order_sn} className="border-b border-gray-50 last:border-0">
+                  <td className="py-2 text-gray-500 font-mono text-xs">{o.order_sn}</td>
+                  <td className="py-2 text-gray-600">{o.date}</td>
+                  <td className={`py-2 text-xs font-medium ${STATUS_COLORS[o.status] ?? 'text-gray-500'}`}>
+                    {o.status?.replace(/_/g, ' ')}
+                  </td>
+                  <td className="py-2 text-right font-medium">RM {o.amount.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-gray-200">
+                <td colSpan={3} className="pt-2 text-sm font-semibold text-gray-700">Total</td>
+                <td className="pt-2 text-right font-bold text-gray-900">RM {data!.total_revenue.toFixed(2)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

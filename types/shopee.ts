@@ -9,6 +9,7 @@ export interface RevenueData {
   total_revenue: number;
   order_count: number;
   daily: { date: string; revenue: number }[];
+  orders: { order_sn: string; date: string; status: string; amount: number }[];
   capped: boolean;
 }
 
