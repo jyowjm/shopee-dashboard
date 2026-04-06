@@ -6,7 +6,8 @@ const CHUNK_SECONDS = 15 * 24 * 60 * 60; // 15-day max per Shopee API
 export async function fetchOrderSummaries(
   from: number,
   to: number,
-  cap = 500
+  cap = 500,
+  timeRangeField: 'create_time' | 'update_time' = 'create_time'
 ): Promise<{ orders: ShopeeOrderSummary[]; capped: boolean }> {
   // Split into ≤15-day windows
   const chunks: Array<{ from: number; to: number }> = [];
@@ -26,7 +27,7 @@ export async function fetchOrderSummaries(
       const data = await callShopee<{ order_list: ShopeeOrderSummary[]; more: boolean; next_cursor: string }>(
         '/api/v2/order/get_order_list',
         {
-          time_range_field: 'create_time',
+          time_range_field: timeRangeField,
           time_from: chunk.from,
           time_to: chunk.to,
           page_size: 100,

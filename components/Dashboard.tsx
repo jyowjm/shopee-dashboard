@@ -7,6 +7,8 @@ import RevenueSection from './RevenueSection';
 import OrdersSection from './OrdersSection';
 import ProductsSection from './ProductsSection';
 import ShopHealthSection from './ShopHealthSection';
+import AdsSection from './AdsSection';
+import CustomersSection from './CustomersSection';
 
 export default function Dashboard() {
   const [dateRange, setDateRange] = useState<DateRange>({
@@ -69,10 +71,16 @@ export default function Dashboard() {
         <div className="lg:col-span-2">
           <RevenueSection dateRange={dateRange} refreshKey={refreshKey} />
         </div>
+        <div className="lg:col-span-2">
+          <AdsSection dateRange={dateRange} refreshKey={refreshKey} />
+        </div>
         <OrdersSection dateRange={dateRange} refreshKey={refreshKey} />
         <ProductsSection dateRange={dateRange} refreshKey={refreshKey} />
         <div className="lg:col-span-2">
           <ShopHealthSection refreshKey={refreshKey} onShopLoaded={handleShopLoaded} />
+        </div>
+        <div className="lg:col-span-2">
+          <CustomersSection dateRange={dateRange} refreshKey={refreshKey} />
         </div>
       </main>
     </div>

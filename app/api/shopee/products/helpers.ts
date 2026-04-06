@@ -4,17 +4,20 @@ export function aggregateProducts(orders: ShopeeOrderDetail[]): ProductData[] {
   const map = new Map<number, ProductData>();
 
   for (const order of orders) {
-    for (const item of order.item_list) {
+    for (const item of order.item_list ?? []) {
+      if (!item.item_id) continue;
+      const qty = item.model_quantity_purchased ?? 0;
+      const price = item.model_discounted_price ?? 0;
+      const revenue = qty * price;
       const existing = map.get(item.item_id);
-      const revenue = item.model_quantity_purchased * item.model_discounted_price;
       if (existing) {
-        existing.units_sold += item.model_quantity_purchased;
+        existing.units_sold += qty;
         existing.revenue += revenue;
       } else {
         map.set(item.item_id, {
           item_id: item.item_id,
-          name: item.item_name,
-          units_sold: item.model_quantity_purchased,
+          name: item.item_name ?? '',
+          units_sold: qty,
           revenue,
         });
       }

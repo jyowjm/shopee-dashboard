@@ -43,3 +43,6 @@ next-env.d.ts
 # local files
 .env.local
 token.json
+
+.vercel
+.env*.local
