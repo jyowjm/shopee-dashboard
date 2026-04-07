@@ -6,7 +6,6 @@ import TimeFilter, { type DateRange } from './TimeFilter';
 import RevenueSection from './RevenueSection';
 import OrdersSection from './OrdersSection';
 import ProductsSection from './ProductsSection';
-import ShopHealthSection from './ShopHealthSection';
 import AdsSection from './AdsSection';
 import CustomersSection from './CustomersSection';
 
@@ -17,8 +16,6 @@ export default function Dashboard() {
   });
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
-  const [shopName, setShopName] = useState('');
-  const [shopLogo, setShopLogo] = useState('');
 
   function handleRefresh() {
     setRefreshKey(k => k + 1);
@@ -31,11 +28,6 @@ export default function Dashboard() {
     setLastUpdated(new Date());
   }
 
-  function handleShopLoaded(name: string, logo: string) {
-    setShopName(name);
-    setShopLogo(logo);
-  }
-
   const minutesAgo = Math.floor((Date.now() - lastUpdated.getTime()) / 60_000);
 
   return (
@@ -43,11 +35,7 @@ export default function Dashboard() {
       <header className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              {shopLogo && <img src={shopLogo} alt={shopName} className="w-8 h-8 rounded-full object-cover" />}
-              <h1 className="text-lg font-semibold text-gray-900">{shopName || 'Shopee Dashboard'}</h1>
-            </div>
+            <h1 className="text-lg font-semibold text-gray-900">Shopee Dashboard</h1>
             <div className="flex items-center gap-3">
               <span className="text-xs text-gray-400">
                 {minutesAgo === 0 ? 'Updated just now' : `Updated ${minutesAgo}m ago`}
@@ -76,9 +64,6 @@ export default function Dashboard() {
         </div>
         <OrdersSection dateRange={dateRange} refreshKey={refreshKey} />
         <ProductsSection dateRange={dateRange} refreshKey={refreshKey} />
-        <div className="lg:col-span-2">
-          <ShopHealthSection refreshKey={refreshKey} onShopLoaded={handleShopLoaded} />
-        </div>
         <div className="lg:col-span-2">
           <CustomersSection dateRange={dateRange} refreshKey={refreshKey} />
         </div>
