@@ -90,11 +90,12 @@ export async function GET(req: NextRequest) {
     const values = [...byBuyer.values()];
     const repeatBuyers = values.filter(v => v.orderCount >= 2).length;
 
-    // Top locations from the period orders
+    // Top locations from the period orders (exclude masked values like "****")
     const stateCount = new Map<string, { display: string; count: number }>();
     for (const o of orders) {
       const raw = o.recipient_state;
       if (!raw?.trim()) continue;
+      if (/^\*+$/.test(raw.trim())) continue; // skip Shopee-masked addresses
       const key = raw.trim().toLowerCase();
       const entry = stateCount.get(key) ?? { display: raw.trim(), count: 0 };
       stateCount.set(key, { display: entry.display, count: entry.count + 1 });

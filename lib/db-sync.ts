@@ -91,6 +91,18 @@ function toTs(unix: number | undefined | null): string | null {
   return new Date(unix * 1000).toISOString();
 }
 
+// Convert Shopee-masked values (e.g. "****", "***57") to null
+function unmasked(val: string | undefined | null): string | null {
+  if (!val?.trim()) return null;
+  if (/^\*+$/.test(val.trim())) return null; // fully masked
+  return val.trim();
+}
+
+const ADDRESS_FIELDS = [
+  'recipient_name', 'recipient_phone', 'recipient_town', 'recipient_district',
+  'recipient_city', 'recipient_state', 'recipient_region', 'recipient_zipcode',
+] as const;
+
 export function apiOrderToRows(
   orders: ShopeeOrderDetail[]
 ): { orderRows: DbOrderRow[]; itemRows: DbItemRow[] } {
@@ -118,14 +130,14 @@ export function apiOrderToRows(
     estimated_shipping_fee: o.estimated_shipping_fee ?? null,
     actual_shipping_fee: o.actual_shipping_fee ?? null,
     actual_shipping_fee_confirmed: o.actual_shipping_fee_confirmed ?? null,
-    recipient_name: o.recipient_address?.name ?? null,
-    recipient_phone: o.recipient_address?.phone ?? null,
-    recipient_town: o.recipient_address?.town ?? null,
-    recipient_district: o.recipient_address?.district ?? null,
-    recipient_city: o.recipient_address?.city ?? null,
-    recipient_state: o.recipient_address?.state ?? null,
-    recipient_region: o.recipient_address?.region ?? null,
-    recipient_zipcode: o.recipient_address?.zipcode ?? null,
+    recipient_name: unmasked(o.recipient_address?.name),
+    recipient_phone: unmasked(o.recipient_address?.phone),
+    recipient_town: unmasked(o.recipient_address?.town),
+    recipient_district: unmasked(o.recipient_address?.district),
+    recipient_city: unmasked(o.recipient_address?.city),
+    recipient_state: unmasked(o.recipient_address?.state),
+    recipient_region: unmasked(o.recipient_address?.region),
+    recipient_zipcode: unmasked(o.recipient_address?.zipcode),
   }));
 
   const itemRows: DbItemRow[] = orders.flatMap(o =>
@@ -188,14 +200,38 @@ async function _upsertOrderRows(rows: DbOrderRow[], source: 'api' | 'report'): P
   }
 
   for (let i = 0; i < enriched.length; i += UPSERT_CHUNK) {
-    const chunk = enriched.slice(i, i + UPSERT_CHUNK);
+    let chunk = enriched.slice(i, i + UPSERT_CHUNK);
+    const chunkSns = chunk.map(r => r.order_sn);
+
+    // For API source: preserve existing address values that were populated from
+    // report uploads — the API masks addresses but reports have real values.
+    if (source === 'api') {
+      const { data: existing } = await supabase
+        .from('orders')
+        .select(`order_sn, ${ADDRESS_FIELDS.join(', ')}`)
+        .in('order_sn', chunkSns);
+      if (existing?.length) {
+        const existingMap = new Map((existing as unknown as Record<string, unknown>[]).map(r => [r.order_sn as string, r]));
+        chunk = chunk.map(row => {
+          const ex = existingMap.get(row.order_sn);
+          if (!ex) return row;
+          const merged = { ...row };
+          for (const field of ADDRESS_FIELDS) {
+            if (merged[field] == null && ex[field] != null) {
+              (merged as Record<string, unknown>)[field] = ex[field];
+            }
+          }
+          return merged;
+        });
+      }
+    }
+
     const { error } = await supabase
       .from('orders')
       .upsert(chunk, { onConflict: 'order_sn', ignoreDuplicates: false });
     if (error) throw new Error(`upsertOrders: ${error.message}`);
 
     // If a row already existed from the other source, mark data_source='both'
-    const chunkSns = chunk.map(r => r.order_sn);
     await supabase
       .from('orders')
       .update({ data_source: 'both' })
