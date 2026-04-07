@@ -263,11 +263,14 @@ export async function replaceOrderItems(
   const supabase = getSupabase();
   if (!sns.length) return;
 
-  const { error: delErr } = await supabase
-    .from('order_items')
-    .delete()
-    .in('order_sn', sns);
-  if (delErr) throw new Error(`replaceOrderItems delete: ${delErr.message}`);
+  // Delete in chunks to avoid URL length limits on large SN lists
+  for (let i = 0; i < sns.length; i += UPSERT_CHUNK) {
+    const { error: delErr } = await supabase
+      .from('order_items')
+      .delete()
+      .in('order_sn', sns.slice(i, i + UPSERT_CHUNK));
+    if (delErr) throw new Error(`replaceOrderItems delete: ${delErr.message}`);
+  }
 
   if (!items.length) return;
 
