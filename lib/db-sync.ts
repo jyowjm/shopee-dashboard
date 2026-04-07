@@ -203,27 +203,30 @@ async function _upsertOrderRows(rows: DbOrderRow[], source: 'api' | 'report'): P
     let chunk = enriched.slice(i, i + UPSERT_CHUNK);
     const chunkSns = chunk.map(r => r.order_sn);
 
-    // For API source: preserve existing address values that were populated from
-    // report uploads — the API masks addresses but reports have real values.
-    if (source === 'api') {
-      const { data: existing } = await supabase
-        .from('orders')
-        .select(`order_sn, ${ADDRESS_FIELDS.join(', ')}`)
-        .in('order_sn', chunkSns);
-      if (existing?.length) {
-        const existingMap = new Map((existing as unknown as Record<string, unknown>[]).map(r => [r.order_sn as string, r]));
-        chunk = chunk.map(row => {
-          const ex = existingMap.get(row.order_sn);
-          if (!ex) return row;
-          const merged = { ...row };
-          for (const field of ADDRESS_FIELDS) {
-            if (merged[field] == null && ex[field] != null) {
-              (merged as Record<string, unknown>)[field] = ex[field];
-            }
+    // Preserve fields that each source cannot provide:
+    // - API source: keep address fields populated by report uploads (API masks them)
+    // - Report source: keep buyer_user_id set by API sync (reports don't have it)
+    const preserveFields: string[] = source === 'api'
+      ? [...ADDRESS_FIELDS]
+      : ['buyer_user_id'];
+
+    const { data: existing } = await supabase
+      .from('orders')
+      .select(`order_sn, ${preserveFields.join(', ')}`)
+      .in('order_sn', chunkSns);
+    if (existing?.length) {
+      const existingMap = new Map((existing as unknown as Record<string, unknown>[]).map(r => [r.order_sn as string, r]));
+      chunk = chunk.map(row => {
+        const ex = existingMap.get(row.order_sn);
+        if (!ex) return row;
+        const merged = { ...row };
+        for (const field of preserveFields) {
+          if ((merged as Record<string, unknown>)[field] == null && ex[field] != null) {
+            (merged as Record<string, unknown>)[field] = ex[field];
           }
-          return merged;
-        });
-      }
+        }
+        return merged;
+      });
     }
 
     const { error } = await supabase
