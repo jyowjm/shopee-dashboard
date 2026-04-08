@@ -120,8 +120,6 @@ export interface FeesData {
     commission_fee: number;
     service_fee: number;
     transaction_fee: number;  // seller_transaction_fee
-    seller_vouchers: number;  // voucher_from_seller
-    shipping_cost: number;    // actual_shipping_fee - shopee_shipping_rebate
   };
   capped: boolean;
   prev_net_payout: number;

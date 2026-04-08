@@ -47,17 +47,13 @@ function aggregateFees(incomes: EscrowIncome[]): Pick<FeesData, 'net_payout' | '
   let commission_fee = 0;
   let service_fee = 0;
   let transaction_fee = 0;
-  let seller_vouchers = 0;
-  let shipping_cost = 0;
 
   for (const inc of incomes) {
-    net_payout       += inc.escrow_amount            ?? 0;
-    gross_revenue    += inc.buyer_total_amount        ?? 0;
-    commission_fee   += inc.commission_fee            ?? 0;
-    service_fee      += inc.service_fee               ?? 0;
-    transaction_fee  += inc.seller_transaction_fee    ?? 0;
-    seller_vouchers  += inc.voucher_from_seller       ?? 0;
-    shipping_cost    += (inc.actual_shipping_fee ?? 0) - (inc.shopee_shipping_rebate ?? 0);
+    net_payout      += inc.escrow_amount         ?? 0;
+    gross_revenue   += inc.buyer_total_amount     ?? 0;
+    commission_fee  += inc.commission_fee         ?? 0;
+    service_fee     += inc.service_fee            ?? 0;
+    transaction_fee += inc.seller_transaction_fee ?? 0;
   }
 
   const total_fees = commission_fee + service_fee + transaction_fee;
@@ -68,7 +64,7 @@ function aggregateFees(incomes: EscrowIncome[]): Pick<FeesData, 'net_payout' | '
     gross_revenue,
     total_fees,
     fee_rate,
-    breakdown: { commission_fee, service_fee, transaction_fee, seller_vouchers, shipping_cost },
+    breakdown: { commission_fee, service_fee, transaction_fee },
   };
 }
 

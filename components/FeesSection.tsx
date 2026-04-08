@@ -99,11 +99,9 @@ export default function FeesSection({ dateRange, refreshKey }: Props) {
   const rm = (n: number) => `RM ${n.toFixed(2)}`;
 
   const breakdownRows = data ? [
-    { label: 'Commission Fee',   value: data.breakdown.commission_fee },
-    { label: 'Service Fee',      value: data.breakdown.service_fee },
-    { label: 'Transaction Fee',  value: data.breakdown.transaction_fee },
-    { label: 'Seller Vouchers',  value: data.breakdown.seller_vouchers },
-    { label: 'Shipping Cost',    value: data.breakdown.shipping_cost },
+    { label: 'Commission Fee',  value: data.breakdown.commission_fee },
+    { label: 'Service Fee',     value: data.breakdown.service_fee },
+    { label: 'Transaction Fee', value: data.breakdown.transaction_fee },
   ] : [];
 
   return (
