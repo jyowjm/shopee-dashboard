@@ -54,6 +54,17 @@ The cron job (`/api/cron/sync-customers`, runs 2am MYT) uses two windows:
 - Explore moving Revenue to Supabase once the 500-order cap becomes a real constraint
 - Automated report ingestion (e.g. email/FTP polling) to remove the manual upload step
 
+### Quarter and Year timeframe presets
+**Added:** 2026-04-08
+
+Add "This quarter", "Last quarter", "This year" presets to the TimeFilter. The delta badge comparison period needs to be decided before implementation:
+
+- **This quarter** — detect current calendar quarter from today's date (e.g. Apr 8 = Q2, so show Apr 1–Apr 8). Delta options: vs same period in previous quarter (Jan 1–Jan 8), or vs same period in Q2 last year (Apr 1–Apr 8, 2025)?
+- **Last quarter** — show the full previous calendar quarter. Delta options: vs the quarter before it, or vs the same quarter last year?
+- **This year** — show Jan 1 to today. Delta presumably vs same period last year (Jan 1–Apr 8, 2025).
+
+The `preset` param system already exists in the route and TimeFilter — new presets just need to be tagged and handled with `subQuarters`/`subYears` from `date-fns`. Decision on delta comparison period needed before implementing.
+
 ---
 
 ## Open Questions
@@ -62,4 +73,4 @@ The cron job (`/api/cron/sync-customers`, runs 2am MYT) uses two windows:
 
 ---
 
-*Last updated: 2026-04-08*
+*Last updated: 2026-04-08 (2)*
