@@ -92,14 +92,33 @@ export async function GET(req: NextRequest) {
 
     const total = byBuyer.size;
 
+    // Canonical names for states that appear under multiple aliases in reports
+    const STATE_ALIASES: Record<string, string> = {
+      'kuala lumpur': 'W.P. Kuala Lumpur',
+      'w.p. kuala lumpur': 'W.P. Kuala Lumpur',
+      'wp kuala lumpur': 'W.P. Kuala Lumpur',
+      'wilayah persekutuan kuala lumpur': 'W.P. Kuala Lumpur',
+      'putrajaya': 'W.P. Putrajaya',
+      'w.p. putrajaya': 'W.P. Putrajaya',
+      'wp putrajaya': 'W.P. Putrajaya',
+      'wilayah persekutuan putrajaya': 'W.P. Putrajaya',
+      'penang': 'Pulau Pinang',
+      'pulau pinang': 'Pulau Pinang',
+      'georgetown': 'Pulau Pinang',
+      'labuan': 'W.P. Labuan',
+      'w.p. labuan': 'W.P. Labuan',
+      'wp labuan': 'W.P. Labuan',
+    };
+
     // Top locations — from all paid orders including report-only (no buyer_user_id filter)
     const stateCount = new Map<string, { display: string; count: number }>();
     for (const o of stateRows) {
       const raw = o.recipient_state;
       if (!raw?.trim()) continue;
       if (/^\*+$/.test(raw.trim())) continue; // skip masked values
-      const key = raw.trim().toLowerCase();
-      const entry = stateCount.get(key) ?? { display: raw.trim(), count: 0 };
+      const normalised = STATE_ALIASES[raw.trim().toLowerCase()] ?? raw.trim();
+      const key = normalised.toLowerCase();
+      const entry = stateCount.get(key) ?? { display: normalised, count: 0 };
       stateCount.set(key, { display: entry.display, count: entry.count + 1 });
     }
     const topLocations = [...stateCount.values()]
