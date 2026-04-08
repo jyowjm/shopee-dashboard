@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import type { DateRange } from './TimeFilter';
 import type { CustomerData } from '@/types/shopee';
 
@@ -52,7 +52,7 @@ export default function CustomersSection({ dateRange, refreshKey }: Props) {
     </div>
   );
 
-  const chartHeight = Math.max(200, (data?.top_locations.length ?? 0) * 36);
+  const chartHeight = Math.max(200, (data?.top_locations.length ?? 0) * 40);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -93,17 +93,20 @@ export default function CustomersSection({ dateRange, refreshKey }: Props) {
 
       {data && data.top_locations.length > 0 && (
         <div>
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Orders by State</p>
+          <div className="flex items-baseline gap-2 mb-3">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Orders by State</p>
+            {data.location_coverage && data.location_coverage.total_paid_orders > 0 && (
+              <p className="text-xs text-gray-400">
+                {data.location_coverage.orders_with_state} of {data.location_coverage.total_paid_orders} paid orders have location data
+              </p>
+            )}
+          </div>
           <ResponsiveContainer width="100%" height={chartHeight}>
             <BarChart layout="vertical" data={data.top_locations} margin={{ left: 8, right: 24, top: 0, bottom: 0 }}>
               <YAxis type="category" dataKey="state" width={120} tick={{ fontSize: 12 }} />
               <XAxis type="number" tick={{ fontSize: 12 }} />
               <Tooltip formatter={(v) => [v, 'Orders']} />
-              <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                {data.top_locations.map((_, i) => (
-                  <Cell key={i} fill="#f97316" fillOpacity={1 - i * 0.06} />
-                ))}
-              </Bar>
+              <Bar dataKey="count" radius={[0, 4, 4, 0]} fill="#f97316" />
             </BarChart>
           </ResponsiveContainer>
         </div>

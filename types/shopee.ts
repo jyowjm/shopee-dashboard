@@ -106,6 +106,7 @@ export interface CustomerData {
   avg_spend_per_customer: number;  // in RM
   top_locations: { state: string; count: number }[];
   capped: boolean;
+  location_coverage: { orders_with_state: number; total_paid_orders: number };
 }
 
 export interface AdsData {

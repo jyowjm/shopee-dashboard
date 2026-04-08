@@ -67,10 +67,17 @@ export async function GET(req: NextRequest) {
     const fromDate = new Date(from * 1000).toISOString();
     const toDate = new Date(to * 1000).toISOString();
 
-    // Run both queries in parallel
-    const [orders, stateRows] = await Promise.all([
+    // Run queries in parallel
+    const [orders, stateRows, totalPaidCount] = await Promise.all([
       fetchPeriodOrders(fromDate, toDate),
       fetchPeriodStates(fromDate, toDate),
+      getSupabase()
+        .from('orders')
+        .select('order_sn', { count: 'exact', head: true })
+        .eq('is_paid_order', true)
+        .gte('create_time', fromDate)
+        .lte('create_time', toDate)
+        .then(r => r.count ?? 0),
     ]);
 
     // Aggregate per-buyer stats for the period
@@ -97,7 +104,6 @@ export async function GET(req: NextRequest) {
     }
     const topLocations = [...stateCount.values()]
       .sort((a, b) => b.count - a.count)
-      .slice(0, 10)
       .map(({ display, count }) => ({ state: display, count }));
 
     if (total === 0) {
@@ -110,6 +116,7 @@ export async function GET(req: NextRequest) {
         avg_spend_per_customer: 0,
         top_locations: topLocations,
         capped: false,
+        location_coverage: { orders_with_state: stateRows.length, total_paid_orders: totalPaidCount as number },
       } satisfies CustomerData);
     }
 
@@ -143,6 +150,7 @@ export async function GET(req: NextRequest) {
       avg_spend_per_customer: total > 0 ? values.reduce((s, v) => s + v.totalSpend, 0) / total : 0,
       top_locations: topLocations,
       capped: false,
+      location_coverage: { orders_with_state: stateRows.length, total_paid_orders: totalPaidCount as number },
     };
 
     return NextResponse.json(result);
