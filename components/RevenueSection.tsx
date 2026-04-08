@@ -26,6 +26,7 @@ export default function RevenueSection({ dateRange, refreshKey }: Props) {
   const [data, setData] = useState<RevenueData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showOrders, setShowOrders] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -77,38 +78,45 @@ export default function RevenueSection({ dateRange, refreshKey }: Props) {
         </LineChart>
       </ResponsiveContainer>
 
-      {/* Per-order breakdown */}
+      {/* Per-order breakdown — load on demand */}
       {(data?.orders?.length ?? 0) > 0 && (
         <div className="mt-6 border-t border-gray-100 pt-4">
-          <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Revenue per Order</h3>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-gray-500 border-b border-gray-100">
-                <th className="pb-2 font-medium">Order</th>
-                <th className="pb-2 font-medium">Date</th>
-                <th className="pb-2 font-medium">Status</th>
-                <th className="pb-2 font-medium text-right">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data!.orders.map(o => (
-                <tr key={o.order_sn} className="border-b border-gray-50 last:border-0">
-                  <td className="py-2 text-gray-500 font-mono text-xs">{o.order_sn}</td>
-                  <td className="py-2 text-gray-600">{o.date}</td>
-                  <td className={`py-2 text-xs font-medium ${STATUS_COLORS[o.status] ?? 'text-gray-500'}`}>
-                    {o.status?.replace(/_/g, ' ')}
-                  </td>
-                  <td className="py-2 text-right font-medium">RM {o.amount.toFixed(2)}</td>
+          <button
+            onClick={() => setShowOrders(v => !v)}
+            className="text-xs font-medium text-orange-600 uppercase tracking-wide hover:text-orange-700"
+          >
+            {showOrders ? 'Hide breakdown ▲' : 'Show breakdown ▼'}
+          </button>
+          {showOrders && (
+            <table className="w-full text-sm mt-3">
+              <thead>
+                <tr className="text-left text-gray-500 border-b border-gray-100">
+                  <th className="pb-2 font-medium">Order</th>
+                  <th className="pb-2 font-medium">Date</th>
+                  <th className="pb-2 font-medium">Status</th>
+                  <th className="pb-2 font-medium text-right">Amount</th>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-gray-200">
-                <td colSpan={3} className="pt-2 text-sm font-semibold text-gray-700">Total</td>
-                <td className="pt-2 text-right font-bold text-gray-900">RM {data!.total_revenue.toFixed(2)}</td>
-              </tr>
-            </tfoot>
-          </table>
+              </thead>
+              <tbody>
+                {data!.orders.map(o => (
+                  <tr key={o.order_sn} className="border-b border-gray-50 last:border-0">
+                    <td className="py-2 text-gray-500 font-mono text-xs">{o.order_sn}</td>
+                    <td className="py-2 text-gray-600">{o.date}</td>
+                    <td className={`py-2 text-xs font-medium ${STATUS_COLORS[o.status] ?? 'text-gray-500'}`}>
+                      {o.status?.replace(/_/g, ' ')}
+                    </td>
+                    <td className="py-2 text-right font-medium">RM {o.amount.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-gray-200">
+                  <td colSpan={3} className="pt-2 text-sm font-semibold text-gray-700">Total</td>
+                  <td className="pt-2 text-right font-bold text-gray-900">RM {data!.total_revenue.toFixed(2)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          )}
         </div>
       )}
     </div>
