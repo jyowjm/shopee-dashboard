@@ -2,18 +2,56 @@
 
 import { useEffect, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { format } from 'date-fns';
+import { format, subMonths } from 'date-fns';
 import type { DateRange } from './TimeFilter';
 import type { RevenueData } from '@/types/shopee';
 
-function DeltaBadge({ current, previous }: { current: number; previous: number }) {
+// Returns a human-readable label for the comparison period, e.g. "Apr 6", "Mar 1–8", "Mar 26 – Apr 1"
+function getPrevPeriodLabel(dateRange: DateRange): string {
+  const { from, to, preset } = dateRange;
+  const currentYear = new Date().getFullYear();
+
+  let prevFrom: Date;
+  let prevTo: Date;
+
+  if (preset === 'this_month' || preset === 'last_month') {
+    prevFrom = subMonths(from, 1);
+    prevTo = subMonths(to, 1);
+  } else {
+    const duration = to.getTime() - from.getTime();
+    prevFrom = new Date(from.getTime() - duration);
+    prevTo = new Date(from.getTime() - 1); // -1ms so it shows the last day of prev period
+  }
+
+  const yearSuffix = (d: Date) => d.getFullYear() !== currentYear ? `, ${d.getFullYear()}` : '';
+  const fmtDay = (d: Date) => format(d, 'MMM d') + yearSuffix(d);
+
+  const fromLabel = fmtDay(prevFrom);
+  const toLabel = fmtDay(new Date(prevTo.getTime() - 1)); // -1ms for display end
+
+  if (fromLabel === toLabel) return fromLabel;
+
+  // Same month and year — compact: "Mar 1–8"
+  if (
+    format(prevFrom, 'MMM yyyy') === format(new Date(prevTo.getTime() - 1), 'MMM yyyy')
+  ) {
+    return `${format(prevFrom, 'MMM d')}–${format(new Date(prevTo.getTime() - 1), 'd')}${yearSuffix(prevFrom)}`;
+  }
+
+  return `${fromLabel} – ${toLabel}`;
+}
+
+function DeltaBadge({ current, previous, periodLabel }: { current: number; previous: number; periodLabel: string }) {
   if (previous === 0) return null;
   const pct = ((current - previous) / previous) * 100;
   const up = pct >= 0;
   return (
-    <span className={`inline-flex items-center gap-0.5 text-xs font-semibold px-1.5 py-0.5 rounded-full ${up ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-      {up ? '▲' : '▼'} {Math.abs(pct).toFixed(1)}%
-    </span>
+    <div className="flex flex-col items-start gap-0.5">
+      <span className={`inline-flex items-center gap-0.5 text-xs font-semibold px-1.5 py-0.5 rounded-full ${up ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+        {up ? '▲' : '▼'} {Math.abs(pct).toFixed(1)}%
+      </span>
+      <span className="text-xs text-gray-400">vs {periodLabel}</span>
+    </div>
   );
 }
 
@@ -71,20 +109,22 @@ export default function RevenueSection({ dateRange, refreshKey }: Props) {
         </p>
       )}
       <div className="flex gap-8 mb-6">
+        {(() => { const periodLabel = getPrevPeriodLabel(dateRange); return (<>
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-start gap-2">
             <p className="text-3xl font-bold text-gray-900">RM {data?.total_revenue.toFixed(2)}</p>
-            {data && <DeltaBadge current={data.total_revenue} previous={data.prev_total_revenue} />}
+            {data && <DeltaBadge current={data.total_revenue} previous={data.prev_total_revenue} periodLabel={periodLabel} />}
           </div>
           <p className="text-sm text-gray-500 mt-1">Total revenue</p>
         </div>
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-start gap-2">
             <p className="text-3xl font-bold text-gray-900">{data?.order_count}</p>
-            {data && <DeltaBadge current={data.order_count} previous={data.prev_order_count} />}
+            {data && <DeltaBadge current={data.order_count} previous={data.prev_order_count} periodLabel={periodLabel} />}
           </div>
           <p className="text-sm text-gray-500 mt-1">Paid orders</p>
         </div>
+        </>); })()}
       </div>
       <ResponsiveContainer width="100%" height={200}>
         <LineChart data={data?.daily ?? []}>
