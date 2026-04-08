@@ -36,5 +36,7 @@ export function aggregateRevenue(orders: ShopeeOrderDetail[]): RevenueData {
     daily,
     orders: orderRows,
     capped: false,
+    prev_total_revenue: 0,
+    prev_order_count: 0,
   };
 }
