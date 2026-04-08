@@ -6,6 +6,17 @@ import { format } from 'date-fns';
 import type { DateRange } from './TimeFilter';
 import type { RevenueData } from '@/types/shopee';
 
+function DeltaBadge({ current, previous }: { current: number; previous: number }) {
+  if (previous === 0) return null;
+  const pct = ((current - previous) / previous) * 100;
+  const up = pct >= 0;
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-xs font-semibold px-1.5 py-0.5 rounded-full ${up ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+      {up ? '▲' : '▼'} {Math.abs(pct).toFixed(1)}%
+    </span>
+  );
+}
+
 const STATUS_COLORS: Record<string, string> = {
   COMPLETED: 'text-green-600',
   SHIPPED: 'text-blue-600',
@@ -60,11 +71,17 @@ export default function RevenueSection({ dateRange, refreshKey }: Props) {
       )}
       <div className="flex gap-8 mb-6">
         <div>
-          <p className="text-3xl font-bold text-gray-900">RM {data?.total_revenue.toFixed(2)}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-3xl font-bold text-gray-900">RM {data?.total_revenue.toFixed(2)}</p>
+            {data && <DeltaBadge current={data.total_revenue} previous={data.prev_total_revenue} />}
+          </div>
           <p className="text-sm text-gray-500 mt-1">Total revenue</p>
         </div>
         <div>
-          <p className="text-3xl font-bold text-gray-900">{data?.order_count}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-3xl font-bold text-gray-900">{data?.order_count}</p>
+            {data && <DeltaBadge current={data.order_count} previous={data.prev_order_count} />}
+          </div>
           <p className="text-sm text-gray-500 mt-1">Paid orders</p>
         </div>
       </div>

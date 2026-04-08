@@ -51,12 +51,30 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Missing from/to params' }, { status: 400 });
     }
 
-    const { orders, capped } = await fetchOrderSummaries(from, to);
+    // Previous period covers the same duration immediately before the current window
+    const duration = to - from;
+    const prevFrom = from - duration;
+    const prevTo = from;
+
+    // Fetch current and previous period summaries in parallel
+    const [{ orders, capped }, { orders: prevOrders }] = await Promise.all([
+      fetchOrderSummaries(from, to),
+      fetchOrderSummaries(prevFrom, prevTo),
+    ]);
+
     const activeOrders = orders.filter(o => !['CANCELLED', 'IN_CANCEL'].includes(o.order_status));
-    const details = await fetchOrderDetails(activeOrders.map(o => o.order_sn));
+    const activePrevOrders = prevOrders.filter(o => !['CANCELLED', 'IN_CANCEL'].includes(o.order_status));
+
+    // Fetch order details for both periods in parallel
+    const [details, prevDetails] = await Promise.all([
+      fetchOrderDetails(activeOrders.map(o => o.order_sn)),
+      fetchOrderDetails(activePrevOrders.map(o => o.order_sn)),
+    ]);
+
+    // Seller vouchers only needed for current period (used in accurate revenue calc)
     const sellerVouchers = await fetchSellerVouchers(details.map(d => d.order_sn));
 
-    // Merge escrow voucher data into order details
+    // Merge escrow voucher data into current order details
     const detailsWithVouchers = details.map(d => ({
       ...d,
       voucher_from_seller: sellerVouchers.get(d.order_sn) ?? 0,
@@ -64,7 +82,15 @@ export async function GET(req: NextRequest) {
 
     const result = aggregateRevenue(detailsWithVouchers);
 
-    return NextResponse.json({ ...result, capped });
+    // Previous period revenue uses total_amount as a fast proxy (no per-order escrow calls)
+    const prevRevenue = prevDetails.reduce((sum, o) => sum + (o.total_amount ?? 0), 0);
+
+    return NextResponse.json({
+      ...result,
+      capped,
+      prev_total_revenue: prevRevenue,
+      prev_order_count: activePrevOrders.length,
+    });
   } catch (err) {
     const e = err as ShopeeApiError;
     if (e.type === 'auth') return NextResponse.json({ error: e.message }, { status: 401 });

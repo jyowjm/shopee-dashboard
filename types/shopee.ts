@@ -11,6 +11,8 @@ export interface RevenueData {
   daily: { date: string; revenue: number }[];
   orders: { order_sn: string; date: string; status: string; amount: number }[];
   capped: boolean;
+  prev_total_revenue: number;
+  prev_order_count: number;
 }
 
 export interface OrdersData {
