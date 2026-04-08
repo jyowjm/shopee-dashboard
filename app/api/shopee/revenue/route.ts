@@ -71,23 +71,30 @@ export async function GET(req: NextRequest) {
       fetchOrderDetails(activePrevOrders.map(o => o.order_sn)),
     ]);
 
-    // Seller vouchers only needed for current period (used in accurate revenue calc)
-    const sellerVouchers = await fetchSellerVouchers(details.map(d => d.order_sn));
+    // Fetch seller vouchers for both periods in parallel — needed for apples-to-apples comparison
+    const [sellerVouchers, prevSellerVouchers] = await Promise.all([
+      fetchSellerVouchers(details.map(d => d.order_sn)),
+      fetchSellerVouchers(prevDetails.map(d => d.order_sn)),
+    ]);
 
-    // Merge escrow voucher data into current order details
+    // Merge escrow voucher data into both periods
     const detailsWithVouchers = details.map(d => ({
       ...d,
       voucher_from_seller: sellerVouchers.get(d.order_sn) ?? 0,
     }));
 
+    const prevDetailsWithVouchers = prevDetails.map(d => ({
+      ...d,
+      voucher_from_seller: prevSellerVouchers.get(d.order_sn) ?? 0,
+    }));
+
     const result = aggregateRevenue(detailsWithVouchers);
 
-    // Previous period revenue — same item-price basis as current period.
-    // Seller vouchers are skipped (no escrow calls) but those are small; the comparison is fair.
-    const prevRevenue = prevDetails.reduce((sum, o) =>
+    // Previous period revenue — identical calculation to current period
+    const prevRevenue = prevDetailsWithVouchers.reduce((sum, o) =>
       sum + (o.item_list ?? []).reduce((s, item) =>
         s + (item.model_discounted_price ?? 0) * (item.model_quantity_purchased ?? 0), 0
-      ), 0
+      ) - (o.voucher_from_seller ?? 0), 0
     );
 
     return NextResponse.json({
