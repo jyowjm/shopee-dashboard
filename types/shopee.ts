@@ -111,6 +111,23 @@ export interface CustomerData {
   location_coverage: { orders_with_state: number; total_paid_orders: number };
 }
 
+export interface FeesData {
+  net_payout: number;       // sum of escrow_amount
+  gross_revenue: number;    // sum of buyer_total_amount
+  total_fees: number;       // commission + service + transaction fees
+  fee_rate: number;         // total_fees / gross_revenue * 100
+  breakdown: {
+    commission_fee: number;
+    service_fee: number;
+    transaction_fee: number;  // seller_transaction_fee
+    seller_vouchers: number;  // voucher_from_seller
+    shipping_cost: number;    // actual_shipping_fee - shopee_shipping_rebate
+  };
+  capped: boolean;
+  prev_net_payout: number;
+  prev_total_fees: number;
+}
+
 export interface AdsData {
   total_spend: number;
   ad_revenue: number;  // broad_gmv sum (7-day attribution)

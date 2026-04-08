@@ -8,6 +8,7 @@ import OrdersSection from './OrdersSection';
 import ProductsSection from './ProductsSection';
 import AdsSection from './AdsSection';
 import CustomersSection from './CustomersSection';
+import FeesSection from './FeesSection';
 
 export default function Dashboard() {
   const [dateRange, setDateRange] = useState<DateRange>({
@@ -58,6 +59,9 @@ export default function Dashboard() {
       <main className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="lg:col-span-2">
           <RevenueSection dateRange={dateRange} refreshKey={refreshKey} />
+        </div>
+        <div className="lg:col-span-2">
+          <FeesSection dateRange={dateRange} refreshKey={refreshKey} />
         </div>
         <div className="lg:col-span-2">
           <AdsSection dateRange={dateRange} refreshKey={refreshKey} />
