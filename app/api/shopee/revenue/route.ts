@@ -82,8 +82,13 @@ export async function GET(req: NextRequest) {
 
     const result = aggregateRevenue(detailsWithVouchers);
 
-    // Previous period revenue uses total_amount as a fast proxy (no per-order escrow calls)
-    const prevRevenue = prevDetails.reduce((sum, o) => sum + (o.total_amount ?? 0), 0);
+    // Previous period revenue — same item-price basis as current period.
+    // Seller vouchers are skipped (no escrow calls) but those are small; the comparison is fair.
+    const prevRevenue = prevDetails.reduce((sum, o) =>
+      sum + (o.item_list ?? []).reduce((s, item) =>
+        s + (item.model_discounted_price ?? 0) * (item.model_quantity_purchased ?? 0), 0
+      ), 0
+    );
 
     return NextResponse.json({
       ...result,
