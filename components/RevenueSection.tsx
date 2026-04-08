@@ -45,7 +45,8 @@ export default function RevenueSection({ dateRange, refreshKey }: Props) {
     try {
       const from = Math.floor(dateRange.from.getTime() / 1000);
       const to = Math.floor(dateRange.to.getTime() / 1000);
-      const res = await fetch(`/api/shopee/revenue?from=${from}&to=${to}`);
+      const presetParam = dateRange.preset ? `&preset=${dateRange.preset}` : '';
+      const res = await fetch(`/api/shopee/revenue?from=${from}&to=${to}${presetParam}`);
       if (res.status === 401) { window.location.href = '/connect'; return; }
       if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
       setData(await res.json());

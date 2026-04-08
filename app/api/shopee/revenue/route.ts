@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { subMonths } from 'date-fns';
 import { callShopee } from '@/lib/shopee';
 import { fetchOrderSummaries } from '@/lib/orders';
 import { aggregateRevenue } from './helpers';
 import type { ShopeeOrderDetail, ShopeeApiError } from '@/types/shopee';
+
+// Shopee timestamps are Unix seconds (UTC). MYT = UTC+8.
+const MYT_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+// Subtract one calendar month from a Unix timestamp, keeping the MYT calendar date correct.
+function subOneMonthMyt(unixSeconds: number): number {
+  const mytDate = new Date(unixSeconds * 1000 + MYT_OFFSET_MS); // treat as MYT
+  const shifted = subMonths(mytDate, 1);
+  return Math.floor((shifted.getTime() - MYT_OFFSET_MS) / 1000);
+}
 
 const BATCH_SIZE = 50;
 
@@ -51,10 +62,19 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Missing from/to params' }, { status: 400 });
     }
 
-    // Previous period covers the same duration immediately before the current window
-    const duration = to - from;
-    const prevFrom = from - duration;
-    const prevTo = from;
+    // Previous period: month-aware for this_month/last_month, duration-shift for everything else
+    const preset = searchParams.get('preset');
+    let prevFrom: number;
+    let prevTo: number;
+    if (preset === 'this_month' || preset === 'last_month') {
+      // e.g. Apr 1–Apr 8 → Mar 1–Mar 8 | Mar 1–Mar 31 → Feb 1–Feb 28
+      prevFrom = subOneMonthMyt(from);
+      prevTo = subOneMonthMyt(to);
+    } else {
+      const duration = to - from;
+      prevFrom = from - duration;
+      prevTo = from;
+    }
 
     // Fetch current and previous period summaries in parallel
     const [{ orders, capped }, { orders: prevOrders }] = await Promise.all([

@@ -5,7 +5,7 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { startOfDay, endOfDay, subDays, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 
-export type DateRange = { from: Date; to: Date };
+export type DateRange = { from: Date; to: Date; preset?: string };
 
 interface TimeFilterProps {
   onChange: (range: DateRange) => void;
@@ -17,8 +17,8 @@ const PRESETS = [
   { label: 'Yesterday', getRange: () => ({ from: startOfDay(subDays(new Date(), 1)), to: endOfDay(subDays(new Date(), 1)) }) },
   { label: 'Last 7 days', getRange: () => ({ from: startOfDay(subDays(new Date(), 6)), to: endOfDay(new Date()) }) },
   { label: 'Last 30 days', getRange: () => ({ from: startOfDay(subDays(new Date(), 29)), to: endOfDay(new Date()) }) },
-  { label: 'Last month', getRange: () => ({ from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) }) },
-  { label: 'This month', getRange: () => ({ from: startOfMonth(new Date()), to: endOfDay(new Date()) }) },
+  { label: 'Last month', getRange: () => ({ from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)), preset: 'last_month' }) },
+  { label: 'This month', getRange: () => ({ from: startOfMonth(new Date()), to: endOfDay(new Date()), preset: 'this_month' }) },
 ];
 
 export default function TimeFilter({ onChange, disabled }: TimeFilterProps) {
