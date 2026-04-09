@@ -36,7 +36,17 @@ export default function Dashboard() {
       <header className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-lg font-semibold text-gray-900">Shopee Dashboard</h1>
+            <div className="flex items-center gap-8">
+              <h1 className="text-lg font-semibold text-gray-900">Shopee Dashboard</h1>
+              <nav className="flex gap-6">
+                <a href="/upload" className="text-sm text-gray-600 hover:text-orange-500">
+                  Upload
+                </a>
+                <a href="/reconciliation" className="text-sm text-gray-600 hover:text-orange-500">
+                  Reconciliation
+                </a>
+              </nav>
+            </div>
             <div className="flex items-center gap-3">
               <span className="text-xs text-gray-400">
                 {minutesAgo === 0 ? 'Updated just now' : `Updated ${minutesAgo}m ago`}
