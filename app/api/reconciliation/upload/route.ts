@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { parsePayout } from '@/lib/payout-parser'
 import { reconcileOrders } from '@/lib/reconciliation-engine'
 import { FEE_CONFIG } from '@/lib/fee-config'
-import { supabase } from '@/lib/supabase'
+import { getSupabase } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
     const total_diff     = +(total_actual - total_expected).toFixed(2)
 
     // Insert payout period
+    const supabase = getSupabase()
     const { data: period, error: periodErr } = await supabase
       .from('payout_periods')
       .insert({

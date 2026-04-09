@@ -3,7 +3,7 @@ import { callShopee, loadTokensOrThrow } from '@/lib/shopee'
 import { normaliseEscrowOrder } from '@/lib/payout-parser'
 import { reconcileOrders } from '@/lib/reconciliation-engine'
 import { FEE_CONFIG } from '@/lib/fee-config'
-import { supabase } from '@/lib/supabase'
+import { getSupabase } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
@@ -144,6 +144,7 @@ export async function POST(req: NextRequest) {
     const total_expected = +results.reduce((s, r) => s + r.commission_expected + r.transaction_expected + r.platform_support_expected + r.cashback_expected + r.ams_expected, 0).toFixed(2)
     const total_diff     = +(total_actual - total_expected).toFixed(2)
 
+    const supabase = getSupabase()
     const { data: period, error: periodErr } = await supabase
       .from('payout_periods')
       .insert({ period_from: from_date, period_to: to_date, source: 'api', total_expected, total_actual, total_diff })

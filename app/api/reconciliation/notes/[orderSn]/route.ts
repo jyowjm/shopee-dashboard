@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { getSupabase } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +17,7 @@ export async function PATCH(
     return NextResponse.json({ error: 'period_id and status required' }, { status: 400 })
   }
 
+  const supabase = getSupabase()
   const { error } = await supabase
     .from('recon_notes')
     .upsert({

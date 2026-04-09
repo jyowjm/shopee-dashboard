@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { getSupabase } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'period_id required' }, { status: 400 })
   }
 
+  const supabase = getSupabase()
   let query = supabase
     .from('payout_orders')
     .select('*')
@@ -28,16 +29,17 @@ export async function GET(req: NextRequest) {
     .select('order_sn, status, notes')
     .eq('period_id', period_id)
 
-  const notesMap = new Map((notes ?? []).map((n) => [n.order_sn, n]))
+  type NoteRow = { order_sn: string; status: string; notes: string | null }
+  const notesMap = new Map<string, NoteRow>((notes ?? []).map((n: NoteRow) => [n.order_sn, n]))
 
-  const merged = (orders ?? []).map((o) => ({
+  const merged = (orders ?? []).map((o: Record<string, unknown>) => ({
     ...o,
-    status: notesMap.get(o.order_sn)?.status ?? 'unreviewed',
-    notes:  notesMap.get(o.order_sn)?.notes  ?? null,
+    status: notesMap.get(o.order_sn as string)?.status ?? 'unreviewed',
+    notes:  notesMap.get(o.order_sn as string)?.notes  ?? null,
   }))
 
   const filtered = (filter === 'investigating' || filter === 'resolved')
-    ? merged.filter((o) => o.status === filter)
+    ? merged.filter((o: Record<string, unknown>) => o.status === filter)
     : merged
 
   return NextResponse.json(filtered)
