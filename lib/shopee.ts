@@ -114,3 +114,10 @@ export async function callShopee<T>(
 
   return (data.response ?? data) as T;
 }
+
+/** Like loadTokens but throws if no tokens are stored (shop not connected) */
+export async function loadTokensOrThrow(): Promise<ShopeeTokens> {
+  const tokens = await loadTokens()
+  if (!tokens) throw new Error('Shop not connected. Please authenticate first.')
+  return tokens
+}
