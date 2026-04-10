@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { loadTikTokTokens } from '@/lib/kv';
+import { loadTikTokTokens, saveTikTokTokens } from '@/lib/kv';
 import { getAuthorizedShops } from '@/lib/tiktok';
 
 /**
@@ -14,8 +14,9 @@ export async function GET() {
 
   const now = Date.now();
 
-  // Try fetching shops to diagnose shop_cipher issues
+  // Try fetching shops — auto-patch cipher if currently missing
   let shopsResult: unknown;
+  let cipherPatched = false;
   try {
     const shops = await getAuthorizedShops(tokens.access_token);
     shopsResult = shops.map(s => ({
@@ -23,6 +24,15 @@ export async function GET() {
       name:   s.name,
       cipher: s.cipher ? `${s.cipher.slice(0, 8)}…` : '(empty)',
     }));
+
+    // If cipher is missing in stored tokens, patch it now
+    if (!tokens.shop_cipher && shops.length > 0) {
+      const match = shops.find(s => s.id === tokens.shop_id) ?? shops[0];
+      if (match?.cipher) {
+        await saveTikTokTokens({ ...tokens, shop_id: match.id, shop_cipher: match.cipher });
+        cipherPatched = true;
+      }
+    }
   } catch (e) {
     shopsResult = { error: (e as Error).message };
   }
@@ -38,5 +48,6 @@ export async function GET() {
     expired:        tokens.expires_at < now,
     ttl_minutes:    Math.round((tokens.expires_at - now) / 60_000),
     shops_api:      shopsResult,
+    cipher_patched: cipherPatched,
   });
 }
