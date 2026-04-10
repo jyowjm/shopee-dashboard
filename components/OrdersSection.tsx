@@ -51,7 +51,7 @@ export default function OrdersSection({ dateRange, refreshKey, platform, hasShop
       } else {
         const url = platform === 'tiktok' ? `/api/tiktok/orders?${qs}` : `/api/shopee/orders?${qs}`;
         const res = await fetch(url);
-        if (res.status === 401) { window.location.href = '/connect'; return; }
+        if (res.status === 401) { throw new Error('Session expired — please reconnect your shop.'); }
         if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
         setData(await res.json());
       }

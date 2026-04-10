@@ -26,7 +26,7 @@ export default function AdsSection({ dateRange, refreshKey }: Props) {
       const start = format(dateRange.from, 'dd-MM-yyyy');
       const end = format(dateRange.to, 'dd-MM-yyyy');
       const res = await fetch(`/api/shopee/ads?start_date=${start}&end_date=${end}`);
-      if (res.status === 401) { window.location.href = '/connect'; return; }
+      if (res.status === 401) { throw new Error('Session expired — please reconnect your shop.'); }
       if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
       setData(await res.json());
     } catch (e) {

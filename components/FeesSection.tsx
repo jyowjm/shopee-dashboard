@@ -95,7 +95,7 @@ export default function FeesSection({ dateRange, refreshKey, platform, hasShopee
           fetch(`/api/shopee/fees?${qs}`),
           fetch(`/api/tiktok/fees?${qs}`),
         ]);
-        if (shopeeRes.status === 401 || tiktokRes.status === 401) { window.location.href = '/connect'; return; }
+        if (shopeeRes.status === 401 || tiktokRes.status === 401) { throw new Error('Session expired — please reconnect your shop.'); }
         const [shopeeData, tiktokData]: [FeesData, FeesData] = await Promise.all([
           shopeeRes.json(),
           tiktokRes.json(),
@@ -104,7 +104,7 @@ export default function FeesSection({ dateRange, refreshKey, platform, hasShopee
       } else {
         const url = platform === 'tiktok' ? `/api/tiktok/fees?${qs}` : `/api/shopee/fees?${qs}`;
         const res = await fetch(url);
-        if (res.status === 401) { window.location.href = '/connect'; return; }
+        if (res.status === 401) { throw new Error('Session expired — please reconnect your shop.'); }
         if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
         setData(await res.json());
       }

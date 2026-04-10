@@ -48,7 +48,7 @@ export default function ProductsSection({ dateRange, refreshKey, platform, hasSh
       } else {
         const url = platform === 'tiktok' ? `/api/tiktok/products?${qs}` : `/api/shopee/products?${qs}`;
         const res = await fetch(url);
-        if (res.status === 401) { window.location.href = '/connect'; return; }
+        if (res.status === 401) { throw new Error('Session expired — please reconnect your shop.'); }
         if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
         const data = await res.json();
         setProducts(data.products ?? []);

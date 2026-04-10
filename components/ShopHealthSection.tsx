@@ -18,7 +18,7 @@ export default function ShopHealthSection({ refreshKey, onShopLoaded }: Props) {
     setError(null);
     try {
       const res = await fetch('/api/shopee/shop');
-      if (res.status === 401) { window.location.href = '/connect'; return; }
+      if (res.status === 401) { throw new Error('Session expired — please reconnect your shop.'); }
       if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
       const d: ShopHealthData = await res.json();
       setData(d);
