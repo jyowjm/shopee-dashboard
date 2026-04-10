@@ -108,7 +108,6 @@ export async function callTikTok<T>(
 
   const params = new URLSearchParams({
     ...signingParams,
-    access_token: tokens.access_token,
     sign,
   });
 
@@ -116,7 +115,10 @@ export async function callTikTok<T>(
 
   const res = await fetch(url, {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-tts-access-token': tokens.access_token,
+    },
     ...(bodyStr ? { body: bodyStr } : {}),
   });
 
