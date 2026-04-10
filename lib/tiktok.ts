@@ -67,6 +67,36 @@ export async function refreshTikTokAccessToken(tokens: TikTokTokens): Promise<Ti
 }
 
 /**
+ * Fetch the list of shops the seller authorized — used right after token exchange
+ * to obtain the shop_cipher, which is NOT included in the OAuth callback URL.
+ *
+ * Signing for this endpoint does NOT use shop_cipher (we don't have it yet).
+ */
+export async function getAuthorizedShops(
+  accessToken: string
+): Promise<Array<{ id: string; name: string; cipher: string }>> {
+  const appKey    = process.env.TIKTOK_CLIENT_KEY!.trim();
+  const appSecret = process.env.TIKTOK_CLIENT_SECRET!.trim();
+  const path      = '/authorization/202309/shops';
+  const timestamp = String(Math.floor(Date.now() / 1000));
+
+  const signingParams: Record<string, string> = { app_key: appKey, timestamp };
+  const sign = signTikTok(appSecret, path, signingParams);
+
+  const params = new URLSearchParams({ ...signingParams, sign });
+  const res = await fetch(`${TIKTOK_BASE}${path}?${params.toString()}`, {
+    headers: { 'x-tts-access-token': accessToken },
+  });
+  const data = await res.json();
+
+  if (data.code !== 0) {
+    throw new Error(`Failed to fetch authorized shops: ${data.message} (code ${data.code})`);
+  }
+
+  return data.data?.shops ?? [];
+}
+
+/**
  * Make an authenticated call to the TikTok Shop Open Platform.
  *
  * @param path    API path, e.g. "/order/202309/orders/search"
