@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { orderSn: string } }
+  { params }: { params: Promise<{ orderSn: string }> }
 ) {
   const { period_id, status, notes } = await req.json() as {
     period_id: string
@@ -17,11 +17,12 @@ export async function PATCH(
     return NextResponse.json({ error: 'period_id and status required' }, { status: 400 })
   }
 
+  const { orderSn } = await params
   const supabase = getSupabase()
   const { error } = await supabase
     .from('recon_notes')
     .upsert({
-      order_sn:   params.orderSn,
+      order_sn:   orderSn,
       period_id,
       status,
       notes:      notes ?? null,
