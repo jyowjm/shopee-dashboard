@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { callShopee, loadTokensOrThrow } from '@/lib/shopee'
 import { normaliseEscrowOrder } from '@/lib/payout-parser'
 import { reconcileOrders } from '@/lib/reconciliation-engine'
+import { fetchAmsConversionReport } from '@/lib/ams'
 import { FEE_CONFIG } from '@/lib/fee-config'
 import { getSupabase } from '@/lib/supabase'
 
@@ -139,7 +140,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const results = reconcileOrders(escrowResults, FEE_CONFIG)
+    const amsAmounts = await fetchAmsConversionReport(from_date, to_date)
+
+    const results = reconcileOrders(escrowResults, FEE_CONFIG, amsAmounts)
     const total_actual   = +results.reduce((s, r) => s + r.commission_actual + r.transaction_actual + r.platform_support_actual + r.cashback_actual + r.ams_actual, 0).toFixed(2)
     const total_expected = +results.reduce((s, r) => s + r.commission_expected + r.transaction_expected + r.platform_support_expected + r.cashback_expected + r.ams_expected, 0).toFixed(2)
     const total_diff     = +(total_actual - total_expected).toFixed(2)

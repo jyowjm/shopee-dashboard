@@ -30,15 +30,34 @@ export const FEE_CONFIG = {
   // Pre-SST rates by payment method.
   // SST is applied by the engine: effective_rate = rate × 1.08
   transaction_fee_rates: {
-    default:         0.035,  // 3.5% → 3.78% incl. SST
-    'SPayLater_1x':  0.045,  // 4.5% → 4.86% incl. SST
-    'SPayLater_3x':  0.050,  // 5.0% → 5.40% incl. SST
+    default:          0.035,  // 3.5% → 3.78% incl. SST (Online Banking, Credit/Debit Card, ShopeePay, COD)
+    'SPayLater_1x':   0.045,  // 4.5% → 4.86% incl. SST
+    'SPayLater_3x':   0.050,  // 5.0% → 5.40% incl. SST
+    'SPayLater_6x':   0.045,  // 4.5% → 4.86% incl. SST
+    'SPayLater_12x':  0.045,  // 4.5% → 4.86% incl. SST
+    'SPayLater_18x':  0.045,  // 4.5% → 4.86% incl. SST
+    'SPayLater_24x':  0.045,  // 4.5% → 4.86% incl. SST
+    'SPayLater_36x':  0.045,  // 4.5% → 4.86% incl. SST
+    'SPayLater_48x':  0.045,  // 4.5% → 4.86% incl. SST
+    // CCI (Credit Card Instalment) — pre-SST rates
+    'CCI_3x':   0.035,  // 3.5% → 3.78% incl. SST
+    'CCI_6x':   0.040,  // 4.0% → 4.32% incl. SST
+    'CCI_12x':  0.050,  // 5.0% → 5.40% incl. SST
+    'CCI_18x':  0.060,  // 6.0% → 6.48% incl. SST
+    'CCI_24x':  0.065,  // 6.5% → 7.02% incl. SST
+    'CCI_36x':  0.075,  // 7.5% → 8.10% incl. SST
   } as Record<string, number>,
 
   // ── AMS Commission ───────────────────────────────────────────────────────
-  // Default AMS rate. Overridden per-order if ams_rates map is provided.
-  // Fetch current rates via: GET /api/v2/ams/get_open_campaign_added_product
-  ams_commission_rate: 0.03,  // 3% — update to match your Shopee Ads setting
+  // Fallback rate used only when fetchAmsConversionReport() is unavailable or
+  // returns no data for an order. When API data IS present, the engine uses
+  // order_brand_commission directly (already incl. SST + direct/indirect split).
+  //
+  // Fallback formula: ROUND(base × rate × 1.08, 2)
+  // where base = product_price − seller_voucher
+  //
+  // Update this rate to match your current Shopee Ads commission setting.
+  ams_commission_rate: 0.03,  // 3% pre-SST
 
   // ── SST ──────────────────────────────────────────────────────────────────
   sst_rate: 0.08,  // 8% SST applied on top of all pre-SST fee rates

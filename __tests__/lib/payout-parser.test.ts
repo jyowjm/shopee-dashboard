@@ -35,7 +35,7 @@ function buildTestXlsx(): Buffer {
     ['Order Info', '', '', '', '', '', '', '', '', '', '', 'Released Amount Details', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Buyer Info', '', '', '', '', '', 'Reference Info', '', '', '', '', '', '', '', ''],
     // Row 2: sub-group headers
     ['', '', '', '', '', '', '', '', '', '', '', 'Order Income', 'Merchandise Subtotal', '', 'Shipping Subtotal', '', '', '', '', '', '', '', 'Vouchers and Rebates', '', '', '', '', 'Fees and Charges', '', '', '', '', '', '', '', '', '', '', '', 'Shipping', '', '', 'Promotion', 'Compensation', 'Refund Amount Breakdown', '', '', '', ''],
-    // Row 3: column names
+    // Row 3: column names (col 30 is unlabeled in real report — extra raw calculation column)
     [
       'Sequence No.', 'View By', 'Order ID', 'refund id', 'Product ID', 'Product Name',
       'Order Creation Date', 'Payout Completed Date', 'Release Channel', 'Order Type', 'Hot Listing',
@@ -46,6 +46,7 @@ function buildTestXlsx(): Buffer {
       'Rebate Provided by Shopee', 'Voucher Sponsored by Seller', 'Cofund Voucher Sponsored by Seller',
       'Coin Cashback Sponsored by Seller', 'Cofund Coin Cashback Sponsored by Seller',
       'Commission Fee (incl. SST)', 'Service Fee (Incl. SST)', 'Transaction Fee (Incl. SST)',
+      '',  // col 30: unlabeled raw transaction fee calculation column (skip)
       'AMS Commission Fee', 'Saver Programme Fee (Incl. SST)', 'Ads Escrow Top Up Fee',
       'Username (Buyer)', 'Amount Paid By Buyer', 'Transaction Fee Rate (%)',
       'Buyer Payment Method', 'Buyer Payment Method Details_1(if applicable)', 'Payment Details / Installment Plan',
@@ -56,19 +57,23 @@ function buildTestXlsx(): Buffer {
       'Pro-rated Shopee Payment Channel Promotion  for return refund Items',
     ],
     // Row 4: Order-level row
+    // col 14 = shipping fee paid by buyer = 13 (non-zero to test parsing)
+    // col 23 = voucher from seller = -8 (negative in report; parser takes abs value)
+    // col 30 = extra unlabeled column (raw calculation value, skipped by parser)
     [
       1, 'Order', 'TEST001', '', '-', '-',
       '2026-04-06', '2026-04-08', 'Seller Wallet', 'Normal Order', 'NO',
       50.11, 64.6, 0,
-      0, -4.9,
+      13, -4.9,                            // col 14 = shipping 13, col 15 = logistic fee
       0, 4.9, 0,
       0, 0, 0,
-      0, 0, 0,
+      0, -8, 0,                            // col 23 = seller voucher -8
       0, 0,
       -7.67, -4.38, -2.44,
-      0, '0.00', 0,
-      'buyer1', 61.37, 3.78,
-      'Online Banking', '', '',
+      '-2.44 * 0.035',                     // col 30 = extra unlabeled col (skip)
+      0, '0.00', 0,                        // col 31 = AMS, col 32 = Saver, col 33 = Ads
+      'buyer1', 61.37, 3.78,               // col 34 = Username, col 35 = Amount, col 36 = TxnRate
+      'Online Banking', '', '',            // col 37 = PaymentMethod, col 38 = PM Details, col 39 = Installment
       '0.00', '2-Day Delivery', 'SPX Express (2DD)',
       '', '0.00', '0.00',
       '0.00', '0.00',
@@ -81,6 +86,7 @@ function buildTestXlsx(): Buffer {
       50.11, 64.6, 0,
       0, -4.9, 0, 4.9, 0, 0, 0, 0, 0, 0, 0, 0, 0,
       -7.67, -4.38, -2.44,
+      '-',                                 // col 30 = extra unlabeled col
       0, '-', 0,
       '', '-', '-', 'Online Banking', '', '-',
       '-', '2-Day Delivery', 'SPX Express (2DD)',
@@ -138,6 +144,14 @@ describe('parsePayout()', () => {
 
     it('maps product_price correctly', () => {
       expect(result.orders[0].product_price).toBe(64.6)
+    })
+
+    it('maps seller_voucher as positive absolute value', () => {
+      expect(result.orders[0].seller_voucher).toBe(8)
+    })
+
+    it('maps shipping_fee_by_buyer correctly', () => {
+      expect(result.orders[0].shipping_fee_by_buyer).toBe(13)
     })
 
     it('maps payment_method correctly', () => {

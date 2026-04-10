@@ -2,7 +2,9 @@
 export interface PayoutOrderRow {
   order_sn: string
   payout_date: string               // YYYY-MM-DD
-  product_price: number             // after seller discounts/vouchers (commission base)
+  product_price: number             // "Product Price" column — after item rebates but before seller voucher
+  seller_voucher: number            // absolute amount of seller-issued voucher
+  shipping_fee_by_buyer: number     // shipping fee paid by buyer (excl. SST)
   payment_method: string            // e.g. "Online Banking", "SPayLater"
   payment_installment: string       // e.g. "1x", "3x" — relevant for SPayLater
   amount_paid_by_buyer: number

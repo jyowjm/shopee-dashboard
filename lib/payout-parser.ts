@@ -6,18 +6,21 @@ const COL = {
   VIEW_BY:             1,
   ORDER_ID:            2,
   PAYOUT_DATE:         7,
+  ORDER_TYPE:          9,
   PRODUCT_PRICE:      12,
   REFUND_AMOUNT:      13,
+  SHIPPING_FEE:       14,  // "Shipping Fee" paid by buyer (excl. SST) — used in transaction base
   VOUCHER_FROM_SELLER: 23,
   COMMISSION_FEE:     27,
   SERVICE_FEE:        28,
   TRANSACTION_FEE:    29,
-  AMS_FEE:            30,
-  AMOUNT_PAID_BUYER:  34,
-  TXN_RATE:           35,
-  PAYMENT_METHOD:     36,
-  INSTALLMENT_PLAN:   38,
-  ORDER_TYPE:          9,
+  // col 30 is an unlabeled raw transaction fee calculation column (skip)
+  AMS_FEE:            31,
+  AMOUNT_PAID_BUYER:  35,
+  TXN_RATE:           36,
+  PAYMENT_METHOD:     37,
+  // col 38 is PM details (e.g. bank name)
+  INSTALLMENT_PLAN:   39,
 } as const
 
 function toNum(val: unknown): number {
@@ -103,19 +106,21 @@ function parseIncomeSheet(
 
     orders.push({
       order_sn,
-      payout_date:          toDateStr(row[COL.PAYOUT_DATE]),
-      product_price:        toNum(row[COL.PRODUCT_PRICE]),
-      payment_method:       toStr(row[COL.PAYMENT_METHOD]),
-      payment_installment:  toStr(row[COL.INSTALLMENT_PLAN]),
-      amount_paid_by_buyer: toNum(row[COL.AMOUNT_PAID_BUYER]),
-      refund_amount:        Math.abs(toNum(row[COL.REFUND_AMOUNT])),
-      order_type:           toStr(row[COL.ORDER_TYPE]),
-      commission_actual:    Math.abs(toNum(row[COL.COMMISSION_FEE])),
-      transaction_actual:   Math.abs(toNum(row[COL.TRANSACTION_FEE])),
+      payout_date:            toDateStr(row[COL.PAYOUT_DATE]),
+      product_price:          toNum(row[COL.PRODUCT_PRICE]),
+      seller_voucher:         Math.abs(toNum(row[COL.VOUCHER_FROM_SELLER])),
+      shipping_fee_by_buyer:  toNum(row[COL.SHIPPING_FEE]),
+      payment_method:         toStr(row[COL.PAYMENT_METHOD]),
+      payment_installment:    toStr(row[COL.INSTALLMENT_PLAN]),
+      amount_paid_by_buyer:   toNum(row[COL.AMOUNT_PAID_BUYER]),
+      refund_amount:          Math.abs(toNum(row[COL.REFUND_AMOUNT])),
+      order_type:             toStr(row[COL.ORDER_TYPE]),
+      commission_actual:      Math.abs(toNum(row[COL.COMMISSION_FEE])),
+      transaction_actual:     Math.abs(toNum(row[COL.TRANSACTION_FEE])),
       service_fee_actual,
       platform_support_actual,
       cashback_actual,
-      ams_actual:           Math.abs(toNum(row[COL.AMS_FEE])),
+      ams_actual:             Math.abs(toNum(row[COL.AMS_FEE])),
     })
   }
 
@@ -172,19 +177,21 @@ export function normaliseEscrowOrder(escrow: {
     : ''
 
   return {
-    order_sn:             escrow.order_sn,
-    payout_date:          payoutDate,
-    product_price:        escrow.original_cost_of_goods_sold ?? escrow.buyer_total_amount,
-    payment_method:       escrow.payment_method ?? '',
-    payment_installment:  '',
-    amount_paid_by_buyer: escrow.buyer_total_amount,
-    refund_amount:        0,
-    order_type:           'Normal Order',
-    commission_actual:    Math.abs(escrow.commission_fee ?? 0),
-    transaction_actual:   Math.abs(escrow.seller_transaction_fee ?? 0),
+    order_sn:               escrow.order_sn,
+    payout_date:            payoutDate,
+    product_price:          escrow.original_cost_of_goods_sold ?? escrow.buyer_total_amount,
+    seller_voucher:         Math.abs(escrow.voucher_from_seller ?? 0),
+    shipping_fee_by_buyer:  0,  // not available via escrow API
+    payment_method:         escrow.payment_method ?? '',
+    payment_installment:    '',
+    amount_paid_by_buyer:   escrow.buyer_total_amount,
+    refund_amount:          0,
+    order_type:             'Normal Order',
+    commission_actual:      Math.abs(escrow.commission_fee ?? 0),
+    transaction_actual:     Math.abs(escrow.seller_transaction_fee ?? 0),
     service_fee_actual,
     platform_support_actual,
     cashback_actual,
-    ams_actual:           Math.abs(escrow.ams_commission_fee ?? 0),
+    ams_actual:             Math.abs(escrow.ams_commission_fee ?? 0),
   }
 }
