@@ -36,8 +36,8 @@ export function signTikTok(
 }
 
 export async function refreshTikTokAccessToken(tokens: TikTokTokens): Promise<TikTokTokens> {
-  const appKey    = process.env.TIKTOK_CLIENT_KEY!;
-  const appSecret = process.env.TIKTOK_CLIENT_SECRET!;
+  const appKey    = process.env.TIKTOK_CLIENT_KEY!.trim();
+  const appSecret = process.env.TIKTOK_CLIENT_SECRET!.trim();
 
   const res = await fetch(REFRESH_URL, {
     method: 'POST',
@@ -92,8 +92,8 @@ export async function callTikTok<T>(
     tokens = await refreshTikTokAccessToken(tokens);
   }
 
-  const appKey    = process.env.TIKTOK_CLIENT_KEY!;
-  const appSecret = process.env.TIKTOK_CLIENT_SECRET!;
+  const appKey    = process.env.TIKTOK_CLIENT_KEY!.trim();
+  const appSecret = process.env.TIKTOK_CLIENT_SECRET!.trim();
   const timestamp = String(Math.floor(Date.now() / 1000));
 
   const method    = options?.method ?? 'GET';

@@ -13,8 +13,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Missing authorization code' }, { status: 400 });
   }
 
-  const appKey    = process.env.TIKTOK_CLIENT_KEY!;
-  const appSecret = process.env.TIKTOK_CLIENT_SECRET!;
+  const appKey    = process.env.TIKTOK_CLIENT_KEY!.trim();
+  const appSecret = process.env.TIKTOK_CLIENT_SECRET!.trim();
 
   const res = await fetch(TOKEN_URL, {
     method: 'POST',
