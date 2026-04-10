@@ -3,13 +3,11 @@ import { NextResponse } from 'next/server';
 const AUTHORIZE_URL = 'https://services.tiktokshop.com/open/authorize';
 
 export async function GET() {
-  const appKey      = process.env.TIKTOK_CLIENT_KEY!.trim();
-  const redirectUrl = process.env.TIKTOK_REDIRECT_URL!.trim() + '/api/auth/tiktok/callback';
+  // The service_id is the numeric app ID shown on your Partner Center app page
+  // (distinct from app_key). The redirect_uri is configured in the app, not sent here.
+  const serviceId = process.env.TIKTOK_SERVICE_ID!.trim();
 
-  const params = new URLSearchParams({
-    app_key:      appKey,
-    redirect_uri: redirectUrl,
-  });
+  const params = new URLSearchParams({ service_id: serviceId });
 
   return NextResponse.redirect(`${AUTHORIZE_URL}?${params.toString()}`);
 }

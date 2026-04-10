@@ -2,9 +2,9 @@ import crypto from 'crypto';
 import { loadTikTokTokens, saveTikTokTokens } from '@/lib/kv';
 import type { TikTokTokens, TikTokApiError } from '@/types/tiktok';
 
-const TIKTOK_BASE = 'https://open-api.tiktokglobalshop.com';
-const TOKEN_URL   = 'https://open-api.tiktokglobalshop.com/api/v2/token/get';
-const REFRESH_URL = 'https://open-api.tiktokglobalshop.com/api/v2/token/refresh';
+const TIKTOK_BASE   = 'https://open-api.tiktokglobalshop.com';
+// Auth endpoints are on a separate domain and use GET with query params
+const REFRESH_URL   = 'https://auth.tiktok-shops.com/api/v2/token/refresh';
 
 export function getTikTokBaseUrl(): string {
   return TIKTOK_BASE;
@@ -39,17 +39,15 @@ export async function refreshTikTokAccessToken(tokens: TikTokTokens): Promise<Ti
   const appKey    = process.env.TIKTOK_CLIENT_KEY!.trim();
   const appSecret = process.env.TIKTOK_CLIENT_SECRET!.trim();
 
-  const res = await fetch(REFRESH_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      app_key: appKey,
-      app_secret: appSecret,
-      refresh_token: tokens.refresh_token,
-      grant_type: 'refresh_token',
-    }),
+  // Refresh is also a GET request with query params
+  const params = new URLSearchParams({
+    app_key:       appKey,
+    app_secret:    appSecret,
+    refresh_token: tokens.refresh_token,
+    grant_type:    'refresh_token',
   });
 
+  const res  = await fetch(`${REFRESH_URL}?${params.toString()}`);
   const data = await res.json();
   if (data.code !== 0) {
     const err: TikTokApiError = { type: 'auth', message: `TikTok token refresh failed: ${data.message}` };
@@ -62,7 +60,7 @@ export async function refreshTikTokAccessToken(tokens: TikTokTokens): Promise<Ti
     refresh_token: d.refresh_token,
     shop_id:       tokens.shop_id,
     shop_cipher:   tokens.shop_cipher,
-    expires_at:    Date.now() + d.access_token_expire_in * 1000,
+    expires_at:    d.access_token_expire_in * 1000,  // absolute Unix timestamp → ms
   };
   await saveTikTokTokens(newTokens);
   return newTokens;
