@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { loadTikTokTokens } from '@/lib/kv';
+import { getAuthorizedShops } from '@/lib/tiktok';
 
 /**
  * Debug endpoint — returns stored TikTok token metadata (NOT the actual tokens).
@@ -12,6 +13,20 @@ export async function GET() {
   }
 
   const now = Date.now();
+
+  // Try fetching shops to diagnose shop_cipher issues
+  let shopsResult: unknown;
+  try {
+    const shops = await getAuthorizedShops(tokens.access_token);
+    shopsResult = shops.map(s => ({
+      id:     s.id,
+      name:   s.name,
+      cipher: s.cipher ? `${s.cipher.slice(0, 8)}…` : '(empty)',
+    }));
+  } catch (e) {
+    shopsResult = { error: (e as Error).message };
+  }
+
   return NextResponse.json({
     connected: true,
     shop_id:        tokens.shop_id,
@@ -22,5 +37,6 @@ export async function GET() {
     expires_at_iso: new Date(tokens.expires_at).toISOString(),
     expired:        tokens.expires_at < now,
     ttl_minutes:    Math.round((tokens.expires_at - now) / 60_000),
+    shops_api:      shopsResult,
   });
 }
