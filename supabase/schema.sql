@@ -65,7 +65,11 @@ CREATE TABLE IF NOT EXISTS orders (
   order_complete_time           TIMESTAMPTZ,
   return_refund_status          TEXT,
   shipment_method               TEXT,
+  -- TikTok-specific buyer identity (TikTok buyer IDs are strings, not BIGINT)
+  tiktok_buyer_uid              TEXT,
   -- Computed / meta
+  platform                      TEXT          NOT NULL DEFAULT 'shopee'
+                                  CHECK (platform IN ('shopee', 'tiktok')),
   is_paid_order                 BOOLEAN       NOT NULL DEFAULT FALSE,
   data_source                   TEXT          NOT NULL DEFAULT 'api',
   synced_at                     TIMESTAMPTZ   NOT NULL DEFAULT NOW()
@@ -75,6 +79,10 @@ CREATE INDEX IF NOT EXISTS idx_orders_buyer_user_id ON orders(buyer_user_id);
 CREATE INDEX IF NOT EXISTS idx_orders_create_time   ON orders(create_time);
 CREATE INDEX IF NOT EXISTS idx_orders_update_time   ON orders(update_time);
 CREATE INDEX IF NOT EXISTS idx_orders_order_status  ON orders(order_status);
+CREATE INDEX IF NOT EXISTS idx_orders_platform      ON orders(platform);
+CREATE INDEX IF NOT EXISTS idx_orders_platform_create_time ON orders(platform, create_time);
+CREATE INDEX IF NOT EXISTS idx_orders_tiktok_buyer_uid ON orders(tiktok_buyer_uid)
+  WHERE tiktok_buyer_uid IS NOT NULL;
 
 -- Order items table
 CREATE TABLE IF NOT EXISTS order_items (

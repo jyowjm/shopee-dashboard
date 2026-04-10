@@ -7,9 +7,12 @@ import type { ProductData } from '@/types/shopee';
 interface Props {
   dateRange: DateRange;
   refreshKey: number;
+  platform: 'all' | 'shopee' | 'tiktok';
+  hasShopee: boolean;
+  hasTikTok: boolean;
 }
 
-export default function ProductsSection({ dateRange, refreshKey }: Props) {
+export default function ProductsSection({ dateRange, refreshKey, platform, hasShopee, hasTikTok }: Props) {
   const [products, setProducts] = useState<ProductData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,11 +24,35 @@ export default function ProductsSection({ dateRange, refreshKey }: Props) {
     try {
       const from = Math.floor(dateRange.from.getTime() / 1000);
       const to = Math.floor(dateRange.to.getTime() / 1000);
-      const res = await fetch(`/api/shopee/products?from=${from}&to=${to}`);
-      if (res.status === 401) { window.location.href = '/connect'; return; }
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
-      const data = await res.json();
-      setProducts(data.products ?? []);
+      const qs = `from=${from}&to=${to}`;
+
+      if (platform === 'all' && hasShopee && hasTikTok) {
+        const [shopeeRes, tiktokRes] = await Promise.all([
+          fetch(`/api/shopee/products?${qs}`),
+          fetch(`/api/tiktok/products?${qs}`),
+        ]);
+        const [s, t] = await Promise.all([shopeeRes.json(), tiktokRes.json()]);
+        // Merge by item name (cross-platform products have different IDs)
+        const nameMap = new Map<string, ProductData>();
+        for (const p of [...(s.products ?? []), ...(t.products ?? [])]) {
+          const key = p.name.toLowerCase().trim();
+          const ex = nameMap.get(key);
+          if (ex) {
+            ex.units_sold += p.units_sold;
+            ex.revenue    += p.revenue;
+          } else {
+            nameMap.set(key, { ...p });
+          }
+        }
+        setProducts(Array.from(nameMap.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 10));
+      } else {
+        const url = platform === 'tiktok' ? `/api/tiktok/products?${qs}` : `/api/shopee/products?${qs}`;
+        const res = await fetch(url);
+        if (res.status === 401) { window.location.href = '/connect'; return; }
+        if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+        const data = await res.json();
+        setProducts(data.products ?? []);
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {

@@ -50,9 +50,32 @@ function DeltaBadge({ current, previous, periodLabel }: { current: number; previ
 interface Props {
   dateRange: DateRange;
   refreshKey: number;
+  platform: 'all' | 'shopee' | 'tiktok';
+  hasShopee: boolean;
+  hasTikTok: boolean;
 }
 
-export default function FeesSection({ dateRange, refreshKey }: Props) {
+function mergeFees(a: FeesData, b: FeesData): FeesData {
+  const net_payout    = a.net_payout    + b.net_payout;
+  const gross_revenue = a.gross_revenue + b.gross_revenue;
+  const total_fees    = a.total_fees    + b.total_fees;
+  return {
+    net_payout,
+    gross_revenue,
+    total_fees,
+    fee_rate: gross_revenue > 0 ? (total_fees / gross_revenue) * 100 : 0,
+    breakdown: {
+      commission_fee:  a.breakdown.commission_fee  + b.breakdown.commission_fee,
+      service_fee:     a.breakdown.service_fee     + b.breakdown.service_fee,
+      transaction_fee: a.breakdown.transaction_fee + b.breakdown.transaction_fee,
+    },
+    capped:          a.capped || b.capped,
+    prev_net_payout: a.prev_net_payout + b.prev_net_payout,
+    prev_total_fees: a.prev_total_fees + b.prev_total_fees,
+  };
+}
+
+export default function FeesSection({ dateRange, refreshKey, platform, hasShopee, hasTikTok }: Props) {
   const [data, setData] = useState<FeesData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,10 +88,26 @@ export default function FeesSection({ dateRange, refreshKey }: Props) {
       const from = Math.floor(dateRange.from.getTime() / 1000);
       const to = Math.floor(dateRange.to.getTime() / 1000);
       const presetParam = dateRange.preset ? `&preset=${dateRange.preset}` : '';
-      const res = await fetch(`/api/shopee/fees?from=${from}&to=${to}${presetParam}`);
-      if (res.status === 401) { window.location.href = '/connect'; return; }
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
-      setData(await res.json());
+      const qs = `from=${from}&to=${to}${presetParam}`;
+
+      if (platform === 'all' && hasShopee && hasTikTok) {
+        const [shopeeRes, tiktokRes] = await Promise.all([
+          fetch(`/api/shopee/fees?${qs}`),
+          fetch(`/api/tiktok/fees?${qs}`),
+        ]);
+        if (shopeeRes.status === 401 || tiktokRes.status === 401) { window.location.href = '/connect'; return; }
+        const [shopeeData, tiktokData]: [FeesData, FeesData] = await Promise.all([
+          shopeeRes.json(),
+          tiktokRes.json(),
+        ]);
+        setData(mergeFees(shopeeData, tiktokData));
+      } else {
+        const url = platform === 'tiktok' ? `/api/tiktok/fees?${qs}` : `/api/shopee/fees?${qs}`;
+        const res = await fetch(url);
+        if (res.status === 401) { window.location.href = '/connect'; return; }
+        if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+        setData(await res.json());
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -99,9 +138,11 @@ export default function FeesSection({ dateRange, refreshKey }: Props) {
   const rm = (n: number) => `RM ${n.toFixed(2)}`;
 
   const breakdownRows = data ? [
-    { label: 'Commission Fee',  value: data.breakdown.commission_fee },
-    { label: 'Service Fee',     value: data.breakdown.service_fee },
-    { label: 'Transaction Fee', value: data.breakdown.transaction_fee },
+    { label: 'Commission Fee',                         value: data.breakdown.commission_fee },
+    ...(data.breakdown.service_fee > 0
+      ? [{ label: 'Service Fee', value: data.breakdown.service_fee }]
+      : []),
+    { label: 'Transaction / Platform Fee',             value: data.breakdown.transaction_fee },
   ] : [];
 
   return (

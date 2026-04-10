@@ -30,7 +30,9 @@ export function isPaidOrder(status: string): boolean {
 // Common DB row shape for the orders table
 export interface DbOrderRow {
   order_sn: string;
+  platform?: 'shopee' | 'tiktok';    // defaults to 'shopee' in DB if omitted
   buyer_user_id?: number | null;
+  tiktok_buyer_uid?: string | null;   // TikTok-specific buyer identity
   region?: string | null;
   currency?: string | null;
   cod?: boolean | null;

@@ -8,6 +8,9 @@ import type { OrdersData } from '@/types/shopee';
 interface Props {
   dateRange: DateRange;
   refreshKey: number;
+  platform: 'all' | 'shopee' | 'tiktok';
+  hasShopee: boolean;
+  hasTikTok: boolean;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -21,7 +24,7 @@ const STATUS_COLORS: Record<string, string> = {
   UNPAID: '#9ca3af',
 };
 
-export default function OrdersSection({ dateRange, refreshKey }: Props) {
+export default function OrdersSection({ dateRange, refreshKey, platform, hasShopee, hasTikTok }: Props) {
   const [data, setData] = useState<OrdersData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,10 +35,26 @@ export default function OrdersSection({ dateRange, refreshKey }: Props) {
     try {
       const from = Math.floor(dateRange.from.getTime() / 1000);
       const to = Math.floor(dateRange.to.getTime() / 1000);
-      const res = await fetch(`/api/shopee/orders?from=${from}&to=${to}`);
-      if (res.status === 401) { window.location.href = '/connect'; return; }
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
-      setData(await res.json());
+      const qs = `from=${from}&to=${to}`;
+
+      if (platform === 'all' && hasShopee && hasTikTok) {
+        const [shopeeRes, tiktokRes] = await Promise.all([
+          fetch(`/api/shopee/orders?${qs}`),
+          fetch(`/api/tiktok/orders?${qs}`),
+        ]);
+        const [s, t]: [OrdersData, OrdersData] = await Promise.all([shopeeRes.json(), tiktokRes.json()]);
+        const by_status = { ...s.by_status };
+        for (const [k, v] of Object.entries(t.by_status)) {
+          by_status[k] = (by_status[k] ?? 0) + v;
+        }
+        setData({ total: s.total + t.total, by_status });
+      } else {
+        const url = platform === 'tiktok' ? `/api/tiktok/orders?${qs}` : `/api/shopee/orders?${qs}`;
+        const res = await fetch(url);
+        if (res.status === 401) { window.location.href = '/connect'; return; }
+        if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+        setData(await res.json());
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {

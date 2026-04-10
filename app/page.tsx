@@ -1,13 +1,23 @@
 import { redirect } from 'next/navigation';
-import { loadTokens } from '@/lib/kv';
+import { loadTokens, loadTikTokTokens } from '@/lib/kv';
 import Dashboard from '@/components/Dashboard';
 
 export const dynamic = 'force-dynamic';
 
 export default async function Home() {
-  const tokens = await loadTokens();
-  if (!tokens) {
+  const [shopeeTokens, tikTokTokens] = await Promise.all([
+    loadTokens(),
+    loadTikTokTokens(),
+  ]);
+
+  if (!shopeeTokens && !tikTokTokens) {
     redirect('/connect');
   }
-  return <Dashboard />;
+
+  return (
+    <Dashboard
+      hasShopee={!!shopeeTokens}
+      hasTikTok={!!tikTokTokens}
+    />
+  );
 }

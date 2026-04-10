@@ -69,9 +69,32 @@ const STATUS_COLORS: Record<string, string> = {
 interface Props {
   dateRange: DateRange;
   refreshKey: number;
+  platform: 'all' | 'shopee' | 'tiktok';
+  hasShopee: boolean;
+  hasTikTok: boolean;
 }
 
-export default function RevenueSection({ dateRange, refreshKey }: Props) {
+function mergeRevenue(a: RevenueData, b: RevenueData): RevenueData {
+  const dailyMap = new Map<string, number>();
+  for (const d of [...a.daily, ...b.daily]) {
+    dailyMap.set(d.date, (dailyMap.get(d.date) ?? 0) + d.revenue);
+  }
+  const daily = Array.from(dailyMap.entries())
+    .map(([date, revenue]) => ({ date, revenue }))
+    .sort((x, y) => x.date.localeCompare(y.date));
+
+  return {
+    total_revenue:       a.total_revenue + b.total_revenue,
+    order_count:         a.order_count   + b.order_count,
+    daily,
+    orders:              [...a.orders, ...b.orders].sort((x, y) => y.date.localeCompare(x.date)),
+    capped:              a.capped || b.capped,
+    prev_total_revenue:  a.prev_total_revenue + b.prev_total_revenue,
+    prev_order_count:    a.prev_order_count   + b.prev_order_count,
+  };
+}
+
+export default function RevenueSection({ dateRange, refreshKey, platform, hasShopee, hasTikTok }: Props) {
   const [data, setData] = useState<RevenueData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -84,10 +107,26 @@ export default function RevenueSection({ dateRange, refreshKey }: Props) {
       const from = Math.floor(dateRange.from.getTime() / 1000);
       const to = Math.floor(dateRange.to.getTime() / 1000);
       const presetParam = dateRange.preset ? `&preset=${dateRange.preset}` : '';
-      const res = await fetch(`/api/shopee/revenue?from=${from}&to=${to}${presetParam}`);
-      if (res.status === 401) { window.location.href = '/connect'; return; }
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
-      setData(await res.json());
+      const qs = `from=${from}&to=${to}${presetParam}`;
+
+      if (platform === 'all' && hasShopee && hasTikTok) {
+        const [shopeeRes, tiktokRes] = await Promise.all([
+          fetch(`/api/shopee/revenue?${qs}`),
+          fetch(`/api/tiktok/revenue?${qs}`),
+        ]);
+        if (shopeeRes.status === 401 || tiktokRes.status === 401) { window.location.href = '/connect'; return; }
+        const [shopeeData, tiktokData]: [RevenueData, RevenueData] = await Promise.all([
+          shopeeRes.json(),
+          tiktokRes.json(),
+        ]);
+        setData(mergeRevenue(shopeeData, tiktokData));
+      } else {
+        const url = platform === 'tiktok' ? `/api/tiktok/revenue?${qs}` : `/api/shopee/revenue?${qs}`;
+        const res = await fetch(url);
+        if (res.status === 401) { window.location.href = '/connect'; return; }
+        if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+        setData(await res.json());
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
