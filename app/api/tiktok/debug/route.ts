@@ -14,7 +14,7 @@ export async function GET() {
 
   const now = Date.now();
 
-  // Try fetching shops — auto-patch cipher if currently missing
+  // Always refresh cipher from the authorized shops endpoint
   let shopsResult: unknown;
   let cipherPatched = false;
   try {
@@ -22,13 +22,13 @@ export async function GET() {
     shopsResult = shops.map(s => ({
       id:     s.id,
       name:   s.name,
-      cipher: s.cipher ? `${s.cipher.slice(0, 8)}…` : '(empty)',
+      cipher: s.cipher ? `${s.cipher.slice(0, 12)}…` : '(empty)',
     }));
 
-    // If cipher is missing in stored tokens, patch it now
-    if (!tokens.shop_cipher && shops.length > 0) {
+    // Always update with the freshest cipher from TikTok
+    if (shops.length > 0) {
       const match = shops.find(s => s.id === tokens.shop_id) ?? shops[0];
-      if (match?.cipher) {
+      if (match?.cipher && match.cipher !== tokens.shop_cipher) {
         await saveTikTokTokens({ ...tokens, shop_id: match.id, shop_cipher: match.cipher });
         cipherPatched = true;
       }
@@ -40,7 +40,7 @@ export async function GET() {
   return NextResponse.json({
     connected: true,
     shop_id:        tokens.shop_id,
-    shop_cipher:    tokens.shop_cipher   ? `${tokens.shop_cipher.slice(0, 8)}…` : '(empty)',
+    shop_cipher:    tokens.shop_cipher   ? `${tokens.shop_cipher.slice(0, 12)}…` : '(empty)',
     access_token:   tokens.access_token  ? `${tokens.access_token.slice(0, 8)}…`  : '(empty)',
     refresh_token:  tokens.refresh_token ? `${tokens.refresh_token.slice(0, 8)}…` : '(empty)',
     expires_at_ms:  tokens.expires_at,
