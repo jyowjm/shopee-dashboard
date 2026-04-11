@@ -24,18 +24,20 @@ async function fetchSettlements(from: number, to: number): Promise<TikTokSettlem
   let hasMore = true;
 
   while (hasMore) {
+    const queryParams: Record<string, string> = {
+      page_size: '100',
+      ...(cursor ? { cursor } : {}),
+    };
     const body: Record<string, unknown> = {
       create_time_from: from,
       create_time_to:   to,
-      page_size:        100,
-      ...(cursor ? { cursor } : {}),
     };
     const data = await callTikTok<{
       records: TikTokSettlementRecord[];
       next_cursor?: string;
     }>(
       '/finance/202309/payments/search',
-      {},
+      queryParams,
       { method: 'POST', body }
     );
     all.push(...(data.records ?? []));

@@ -56,11 +56,15 @@ export async function fetchTikTokOrderList(
     let hasMore = true;
 
     while (hasMore && allOrders.length < cap) {
+      // page_size and cursor are query params (signed), not body params
+      const queryParams: Record<string, string> = {
+        page_size: '100',
+        ...(cursor ? { cursor } : {}),
+      };
+
       const body: Record<string, unknown> = {
         create_time_from: start,
         create_time_to:   end,
-        page_size:        100,
-        ...(cursor ? { cursor } : {}),
       };
 
       const data = await callTikTok<{
@@ -69,7 +73,7 @@ export async function fetchTikTokOrderList(
         total_count?: number;
       }>(
         '/order/202309/orders/search',
-        {},
+        queryParams,
         { method: 'POST', body }
       );
 
