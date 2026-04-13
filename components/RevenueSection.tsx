@@ -83,6 +83,8 @@ function mergeRevenue(a: RevenueData, b: RevenueData): RevenueData {
     .map(([date, revenue]) => ({ date, revenue }))
     .sort((x, y) => x.date.localeCompare(y.date));
 
+  // Shipping fields (TikTok-only) are not forwarded — the shipping toggle only shows
+  // when platform === 'tiktok', so the merged 'all platforms' view never needs them.
   return {
     total_revenue:       a.total_revenue + b.total_revenue,
     order_count:         a.order_count   + b.order_count,
