@@ -63,8 +63,8 @@ export async function fetchTikTokOrderList(
       };
 
       const body: Record<string, unknown> = {
-        create_time_from: start,
-        create_time_to:   end,
+        create_time_ge: start,   // ≥ start (TikTok uses _ge/_lt, not _from/_to)
+        create_time_lt: end,     // < end
       };
 
       const data = await callTikTok<{
