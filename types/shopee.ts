@@ -8,8 +8,8 @@ export interface ShopeeTokens {
 export interface RevenueData {
   total_revenue: number;
   order_count: number;
-  daily: { date: string; revenue: number; shippingRevenue?: number }[];
-  orders: { order_sn: string; date: string; status: string; amount: number; shippingAmount?: number }[];
+  daily: { date: string; revenue: number; shipping_revenue?: number }[];
+  orders: { order_sn: string; date: string; status: string; amount: number; shipping_amount?: number }[];
   capped: boolean;
   prev_total_revenue: number;
   prev_order_count: number;
