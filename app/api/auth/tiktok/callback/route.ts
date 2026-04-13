@@ -39,25 +39,37 @@ export async function GET(req: NextRequest) {
   const d = data.data;
   const accessToken = d.access_token as string;
 
-  // shop_cipher is NOT in the callback URL — fetch it from the authorized shops list
-  let shopCipher = '';
-  try {
-    const shops = await getAuthorizedShops(accessToken);
-    // Match by shop_id if provided, otherwise take the first shop
-    const match = shopId
-      ? shops.find(s => s.id === shopId) ?? shops[0]
-      : shops[0];
-    shopCipher = match?.cipher ?? '';
-  } catch (e) {
-    // Non-fatal — store empty cipher; user can reconnect if API calls fail
-    console.error('Could not fetch shop cipher:', e);
+  // Log token response shape for debugging (no secret values)
+  console.log('[TikTok callback] token response keys:', JSON.stringify(Object.keys(d)));
+  console.log('[TikTok callback] shops in token response:', JSON.stringify(d.shops ?? null));
+  console.log('[TikTok callback] shopId from URL:', shopId);
+
+  // 1. Try to get shop info directly from token exchange response
+  //    (202309/202407 both include a shops[] array in the response)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const shopFromToken: any = d.shops?.find((s: any) => s.id === shopId) ?? d.shops?.[0];
+  let shopCipher    = (shopFromToken?.cipher as string) ?? '';
+  let resolvedShopId = (shopFromToken?.id as string)    ?? shopId ?? '';
+
+  // 2. If token response had no shops, fall back to /authorization/202309/shops
+  if (!shopCipher) {
+    try {
+      const shops = await getAuthorizedShops(accessToken);
+      const match = shops.find(s => s.id === resolvedShopId) ?? shops[0];
+      shopCipher     = match?.cipher     ?? '';
+      resolvedShopId = match?.id         ?? resolvedShopId;
+    } catch (e) {
+      console.error('[TikTok callback] getAuthorizedShops failed:', (e as Error).message);
+    }
   }
+
+  console.log('[TikTok callback] resolved shop_id:', resolvedShopId, '| cipher present:', !!shopCipher);
 
   // access_token_expire_in is an absolute Unix timestamp (seconds), not a duration
   await saveTikTokTokens({
     access_token:  accessToken,
     refresh_token: d.refresh_token,
-    shop_id:       shopId ?? d.seller_base_region ?? '',
+    shop_id:       resolvedShopId || d.seller_base_region || '',
     shop_cipher:   shopCipher,
     expires_at:    d.access_token_expire_in * 1000,  // Unix seconds → ms
   });
