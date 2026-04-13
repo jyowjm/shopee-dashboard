@@ -162,6 +162,11 @@ export default function RevenueSection({ dateRange, refreshKey, platform, hasSho
     ? 'Formula: MSRP − seller discounts + buyer shipping fee. Platform discounts excluded.'
     : 'Formula: MSRP − seller discounts. Platform discounts excluded.';
 
+  const chartData = (data?.daily ?? []).map(d => ({
+    ...d,
+    revenue: d.revenue + (showShipping ? (d.shipping_revenue ?? 0) : 0),
+  }));
+
   if (loading) return <SectionSkeleton title="Revenue" />;
   if (error) return <SectionError title="Revenue" message={error} onRetry={load} />;
 
@@ -236,7 +241,7 @@ export default function RevenueSection({ dateRange, refreshKey, platform, hasSho
         </>); })()}
       </div>
       <ResponsiveContainer width="100%" height={200}>
-        <LineChart data={data?.daily ?? []}>
+        <LineChart data={chartData}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
           <XAxis dataKey="date" tick={{ fontSize: 12 }} tickFormatter={d => format(new Date(d), 'MMM d')} />
           <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `RM ${v}`} />
@@ -261,7 +266,9 @@ export default function RevenueSection({ dateRange, refreshKey, platform, hasSho
                   <th className="pb-2 font-medium">Order</th>
                   <th className="pb-2 font-medium">Date</th>
                   <th className="pb-2 font-medium">Status</th>
-                  <th className="pb-2 font-medium text-right">Amount</th>
+                  <th className="pb-2 font-medium text-right">
+                    {platform === 'tiktok' ? (includeShipping ? 'Gross Revenue' : 'Product Revenue') : 'Amount'}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -272,14 +279,16 @@ export default function RevenueSection({ dateRange, refreshKey, platform, hasSho
                     <td className={`py-2 text-xs font-medium ${STATUS_COLORS[o.status] ?? 'text-gray-500'}`}>
                       {o.status?.replace(/_/g, ' ')}
                     </td>
-                    <td className="py-2 text-right font-medium">RM {o.amount.toFixed(2)}</td>
+                    <td className="py-2 text-right font-medium">
+                      RM {(o.amount + (showShipping ? (o.shipping_amount ?? 0) : 0)).toFixed(2)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-gray-200">
                   <td colSpan={3} className="pt-2 text-sm font-semibold text-gray-700">Total</td>
-                  <td className="pt-2 text-right font-bold text-gray-900">RM {data!.total_revenue.toFixed(2)}</td>
+                  <td className="pt-2 text-right font-bold text-gray-900">RM {displayRevenue.toFixed(2)}</td>
                 </tr>
               </tfoot>
             </table>
