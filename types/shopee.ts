@@ -8,11 +8,14 @@ export interface ShopeeTokens {
 export interface RevenueData {
   total_revenue: number;
   order_count: number;
-  daily: { date: string; revenue: number }[];
-  orders: { order_sn: string; date: string; status: string; amount: number }[];
+  daily: { date: string; revenue: number; shippingRevenue?: number }[];
+  orders: { order_sn: string; date: string; status: string; amount: number; shippingAmount?: number }[];
   capped: boolean;
   prev_total_revenue: number;
   prev_order_count: number;
+  // TikTok-only — undefined for Shopee
+  total_shipping_revenue?: number;
+  prev_total_shipping_revenue?: number;
 }
 
 export interface OrdersData {
