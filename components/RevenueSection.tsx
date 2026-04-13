@@ -267,7 +267,7 @@ export default function RevenueSection({ dateRange, refreshKey, platform, hasSho
                   <th className="pb-2 font-medium">Date</th>
                   <th className="pb-2 font-medium">Status</th>
                   <th className="pb-2 font-medium text-right">
-                    {platform === 'tiktok' ? (includeShipping ? 'Gross Revenue' : 'Product Revenue') : 'Amount'}
+                    {platform === 'tiktok' ? (showShipping ? 'Gross Revenue' : 'Product Revenue') : 'Amount'}
                   </th>
                 </tr>
               </thead>
