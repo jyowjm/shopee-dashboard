@@ -17,7 +17,33 @@ function toMytDate(unixSeconds: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-const CANCELLED_STATUSES = new Set(['CANCELLED', 'PARTIALLY_REFUNDED']);
+// Orders where buyer has paid — exclude unpaid, on-hold, cancelled, and refunded
+const EXCLUDED_STATUSES = new Set([
+  'UNPAID',
+  'ON_HOLD',
+  'CANCELLED',
+  'PARTIALLY_REFUNDED',
+]);
+
+/**
+ * Revenue for one order = sum of (sale_price × quantity) across line items.
+ * Falls back to payment.sub_total if line_items are empty.
+ * This matches Shopee's approach: model_discounted_price × quantity (item-level
+ * revenue, excluding shipping and platform discounts).
+ */
+function calcOrderRevenue(o: {
+  line_items?: Array<{ sale_price?: string; quantity?: number }>;
+  payment?: { sub_total?: string };
+}): number {
+  const lineTotal = (o.line_items ?? []).reduce((sum, item) => {
+    const price = parseFloat(item.sale_price ?? '0') || 0;
+    const qty   = item.quantity ?? 0;
+    return sum + price * qty;
+  }, 0);
+  if (lineTotal > 0) return lineTotal;
+  // Fallback: use sub_total from payment (item prices after seller discounts)
+  return parseFloat(o.payment?.sub_total ?? '0') || 0;
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -46,21 +72,21 @@ export async function GET(req: NextRequest) {
       fetchTikTokOrderList(prevFrom, prevTo, 500),
     ]);
 
-    const activeIds     = currentList.filter(o => !CANCELLED_STATUSES.has(o.status)).map(o => o.id);
-    const activePrevIds = prevList.filter(o => !CANCELLED_STATUSES.has(o.status)).map(o => o.id);
+    const activeIds     = currentList.filter(o => !EXCLUDED_STATUSES.has(o.status)).map(o => o.id);
+    const activePrevIds = prevList.filter(o => !EXCLUDED_STATUSES.has(o.status)).map(o => o.id);
 
     const [details, prevDetails] = await Promise.all([
       fetchTikTokOrderDetails(activeIds),
       fetchTikTokOrderDetails(activePrevIds),
     ]);
 
-    // Build daily revenue map
+    // Build daily revenue map using line_items (consistent with Shopee item-level approach)
     const dailyMap = new Map<string, number>();
     let totalRevenue = 0;
     const orderRows: RevenueData['orders'] = [];
 
     for (const o of details) {
-      const amount = parseFloat(o.payment?.total_amount ?? '0') || 0;
+      const amount = calcOrderRevenue(o);
       const date   = toMytDate(o.create_time);
       dailyMap.set(date, (dailyMap.get(date) ?? 0) + amount);
       totalRevenue += amount;
@@ -73,9 +99,7 @@ export async function GET(req: NextRequest) {
 
     orderRows.sort((a, b) => b.date.localeCompare(a.date));
 
-    const prevTotalRevenue = prevDetails.reduce(
-      (sum, o) => sum + (parseFloat(o.payment?.total_amount ?? '0') || 0), 0
-    );
+    const prevTotalRevenue = prevDetails.reduce((sum, o) => sum + calcOrderRevenue(o), 0);
 
     const result: RevenueData = {
       total_revenue:    totalRevenue,

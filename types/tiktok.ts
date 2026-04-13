@@ -80,6 +80,20 @@ export interface TikTokSettlementRecord {
   affiliate_commission?: string;
 }
 
+/**
+ * Response from GET /finance/202501/orders/{order_id}/statement_transactions
+ * Available for all regions (including SEA). Only settled orders have records.
+ */
+export interface TikTokOrderStatement {
+  order_id: string;
+  order_create_time: number;
+  currency: string;
+  revenue_amount: string;         // item revenue (positive)
+  fee_and_tax_amount: string;     // platform fees + taxes (negative value)
+  shipping_cost_amount: string;   // shipping subsidy to seller (negative value)
+  settlement_amount: string;      // net payout to seller
+}
+
 export interface TikTokProductSearchItem {
   id: string;
   title: string;

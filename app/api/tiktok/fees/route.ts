@@ -2,10 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { subMonths } from 'date-fns';
 import { fetchTikTokOrderList } from '@/lib/tiktok-orders';
 import { callTikTok } from '@/lib/tiktok';
-import type { TikTokApiError, TikTokSettlementRecord } from '@/types/tiktok';
+import type { TikTokApiError, TikTokOrderStatement } from '@/types/tiktok';
 import type { FeesData } from '@/types/shopee';
 
 const MYT_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+// Only settled (COMPLETED) orders have statement_transaction records
+const SETTLED_STATUSES = new Set(['COMPLETED', 'DELIVERED']);
+
+// Max orders to fetch statement data for — avoids excessive API calls
+const STATEMENT_CAP = 50;
 
 function subOneMonthMyt(unixSeconds: number): number {
   const mytDate = new Date(unixSeconds * 1000 + MYT_OFFSET_MS);
@@ -18,54 +24,48 @@ function parseAmt(val: string | undefined | null): number {
   return parseFloat(val) || 0;
 }
 
-async function fetchSettlements(from: number, to: number): Promise<TikTokSettlementRecord[]> {
-  const all: TikTokSettlementRecord[] = [];
-  let cursor = '';
-  let hasMore = true;
-
-  while (hasMore) {
-    const queryParams: Record<string, string> = {
-      page_size: '100',
-      ...(cursor ? { cursor } : {}),
-    };
-    const body: Record<string, unknown> = {
-      create_time_from: from,
-      create_time_to:   to,
-    };
-    const data = await callTikTok<{
-      records: TikTokSettlementRecord[];
-      next_cursor?: string;
-    }>(
-      '/finance/202309/payments/search',
-      queryParams,
-      { method: 'POST', body }
+/**
+ * Fetch the statement transactions for a single settled order.
+ * Uses GET /finance/202501/orders/{order_id}/statement_transactions
+ * Available for all regions (including SEA Malaysia).
+ * Returns null if the order is not yet settled.
+ */
+async function fetchOrderStatement(orderId: string): Promise<TikTokOrderStatement | null> {
+  try {
+    const data = await callTikTok<TikTokOrderStatement>(
+      `/finance/202501/orders/${orderId}/statement_transactions`,
+      {}
     );
-    all.push(...(data.records ?? []));
-    cursor  = data.next_cursor ?? '';
-    hasMore = !!cursor;
+    return data;
+  } catch {
+    // Order not settled yet — return null (treat as no fees data)
+    return null;
   }
-
-  return all;
 }
 
-function aggregateFees(settlements: TikTokSettlementRecord[]) {
+/**
+ * Fetch statement data for a batch of order IDs in parallel.
+ * Returns only the records that have been settled.
+ */
+async function fetchStatements(orderIds: string[]): Promise<TikTokOrderStatement[]> {
+  const results = await Promise.all(orderIds.map(id => fetchOrderStatement(id)));
+  return results.filter((r): r is TikTokOrderStatement => r !== null);
+}
+
+function aggregateFees(statements: TikTokOrderStatement[]) {
   let net_payout      = 0;
   let gross_revenue   = 0;
-  let commission_fee  = 0;
-  let transaction_fee = 0;
+  let total_fees      = 0;
 
-  for (const s of settlements) {
-    net_payout      += parseAmt(s.settlement_amount);
-    gross_revenue   += parseAmt(s.subtotal);
-    commission_fee  += parseAmt(s.commission_fee);
-    commission_fee  += parseAmt(s.affiliate_commission);
-    transaction_fee += parseAmt(s.transaction_fee);
+  for (const s of statements) {
+    gross_revenue += parseAmt(s.revenue_amount);
+    // fee_and_tax_amount is negative — take absolute value for "fees charged"
+    total_fees    += Math.abs(parseAmt(s.fee_and_tax_amount));
+    net_payout    += parseAmt(s.settlement_amount);
   }
 
-  const total_fees = commission_fee + transaction_fee;
-  const fee_rate   = gross_revenue > 0 ? (total_fees / gross_revenue) * 100 : 0;
-
-  return { net_payout, gross_revenue, total_fees, fee_rate, commission_fee, transaction_fee };
+  const fee_rate = gross_revenue > 0 ? (total_fees / gross_revenue) * 100 : 0;
+  return { net_payout, gross_revenue, total_fees, fee_rate };
 }
 
 export async function GET(req: NextRequest) {
@@ -90,17 +90,30 @@ export async function GET(req: NextRequest) {
       prevTo   = from;
     }
 
-    // Fetch settlement records for both periods in parallel
-    const [currentSettlements, prevSettlements] = await Promise.all([
-      fetchSettlements(from, to).catch(() => [] as TikTokSettlementRecord[]),
-      fetchSettlements(prevFrom, prevTo).catch(() => [] as TikTokSettlementRecord[]),
+    // Fetch order lists for both periods
+    const [{ orders: currentList, capped }, { orders: prevList }] = await Promise.all([
+      fetchTikTokOrderList(from, to, 500),
+      fetchTikTokOrderList(prevFrom, prevTo, 500),
     ]);
 
-    const current = aggregateFees(currentSettlements);
-    const prev    = aggregateFees(prevSettlements);
+    // Only completed/delivered orders have settled statements
+    const settledIds     = currentList
+      .filter(o => SETTLED_STATUSES.has(o.status))
+      .slice(0, STATEMENT_CAP)
+      .map(o => o.id);
+    const settledPrevIds = prevList
+      .filter(o => SETTLED_STATUSES.has(o.status))
+      .slice(0, STATEMENT_CAP)
+      .map(o => o.id);
 
-    // Check if order cap was hit (best-effort using order list)
-    const { capped } = await fetchTikTokOrderList(from, to, 500);
+    // Fetch statement data for both periods in parallel
+    const [currentStatements, prevStatements] = await Promise.all([
+      fetchStatements(settledIds),
+      fetchStatements(settledPrevIds),
+    ]);
+
+    const current = aggregateFees(currentStatements);
+    const prev    = aggregateFees(prevStatements);
 
     const result: FeesData = {
       net_payout:     current.net_payout,
@@ -108,9 +121,9 @@ export async function GET(req: NextRequest) {
       total_fees:     current.total_fees,
       fee_rate:       current.fee_rate,
       breakdown: {
-        commission_fee:  current.commission_fee,
+        commission_fee:  current.total_fees,   // fee_and_tax_amount covers commission + taxes
         service_fee:     0,
-        transaction_fee: current.transaction_fee,
+        transaction_fee: 0,
       },
       capped,
       prev_net_payout: prev.net_payout,
