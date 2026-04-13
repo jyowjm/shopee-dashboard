@@ -143,8 +143,8 @@ export default function RevenueSection({ dateRange, refreshKey, platform, hasSho
   useEffect(() => { load(); }, [dateRange, refreshKey]);
 
   // Shipping fields are only present on TikTok responses
-  const shippingRevenue     = (data as RevenueData & { total_shipping_revenue?: number })?.total_shipping_revenue ?? 0;
-  const prevShippingRevenue = (data as RevenueData & { prev_total_shipping_revenue?: number })?.prev_total_shipping_revenue ?? 0;
+  const shippingRevenue     = data?.total_shipping_revenue     ?? 0;
+  const prevShippingRevenue = data?.prev_total_shipping_revenue ?? 0;
   const showShipping        = platform === 'tiktok' && includeShipping;
   const displayRevenue      = (data?.total_revenue     ?? 0) + (showShipping ? shippingRevenue     : 0);
   const prevDisplayRevenue  = (data?.prev_total_revenue ?? 0) + (showShipping ? prevShippingRevenue : 0);
