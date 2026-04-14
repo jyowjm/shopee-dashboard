@@ -158,10 +158,10 @@ export function tikTokOrdersToRows(
       model_id:                  parseInt(item.sku_id, 10) || null,
       model_name:                item.sku_name ?? null,
       model_sku:                 item.seller_sku ?? null,
-      model_quantity_purchased:  item.quantity ?? null,
+      model_quantity_purchased:  item.quantity ?? 1,    // TikTok: each line_item = 1 unit (no quantity field)
       model_original_price:      parsePrice(item.original_price),
       model_discounted_price:    parsePrice(item.sale_price),
-      image_url:                 item.image_url ?? null,
+      image_url:                 item.sku_image ?? null, // TikTok uses sku_image, not image_url
     }))
   );
 
