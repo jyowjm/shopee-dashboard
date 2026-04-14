@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
       for (const item of o.line_items ?? []) {
         const productId = item.product_id;
         if (!productId) continue;
-        const qty     = item.quantity ?? 0;
+        const qty     = item.quantity ?? 1;   // TikTok line_items have no quantity field; each item = 1 unit
         const price   = parseFloat(item.sale_price ?? '0') || 0;
         const revenue = qty * price;
         const existing = map.get(productId);
