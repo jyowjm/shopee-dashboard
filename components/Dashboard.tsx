@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { subDays, startOfDay, endOfDay } from 'date-fns';
 import TimeFilter, { type DateRange } from './TimeFilter';
 import RevenueSection from './RevenueSection';
@@ -29,6 +29,15 @@ export default function Dashboard({ hasShopee, hasTikTok }: Props) {
   const [platform, setPlatform] = useState<Platform>(
     hasShopee ? (hasTikTok ? 'all' : 'shopee') : 'tiktok'
   );
+  const [includeTikTokShipping, setIncludeTikTokShipping] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('tiktok-revenue-include-shipping') === 'true';
+  });
+
+  const handleToggleTikTokShipping = useCallback((val: boolean) => {
+    setIncludeTikTokShipping(val);
+    localStorage.setItem('tiktok-revenue-include-shipping', String(val));
+  }, []);
 
   function handleRefresh() {
     setRefreshKey(k => k + 1);
@@ -108,7 +117,7 @@ export default function Dashboard({ hasShopee, hasTikTok }: Props) {
 
       <main className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="lg:col-span-2">
-          <RevenueSection dateRange={dateRange} refreshKey={refreshKey} platform={platform} hasShopee={hasShopee} hasTikTok={hasTikTok} />
+          <RevenueSection dateRange={dateRange} refreshKey={refreshKey} platform={platform} hasShopee={hasShopee} hasTikTok={hasTikTok} includeShipping={includeTikTokShipping} onToggleShipping={handleToggleTikTokShipping} />
         </div>
         <div className="lg:col-span-2">
           <FeesSection dateRange={dateRange} refreshKey={refreshKey} platform={platform} hasShopee={hasShopee} hasTikTok={hasTikTok} />
@@ -119,7 +128,7 @@ export default function Dashboard({ hasShopee, hasTikTok }: Props) {
           </div>
         )}
         <OrdersSection dateRange={dateRange} refreshKey={refreshKey} platform={platform} hasShopee={hasShopee} hasTikTok={hasTikTok} />
-        <ProductsSection dateRange={dateRange} refreshKey={refreshKey} platform={platform} hasShopee={hasShopee} hasTikTok={hasTikTok} />
+        <ProductsSection dateRange={dateRange} refreshKey={refreshKey} platform={platform} hasShopee={hasShopee} hasTikTok={hasTikTok} includeTikTokShipping={includeTikTokShipping} />
         <div className="lg:col-span-2">
           <CustomersSection dateRange={dateRange} refreshKey={refreshKey} platform={platform} hasShopee={hasShopee} hasTikTok={hasTikTok} />
         </div>

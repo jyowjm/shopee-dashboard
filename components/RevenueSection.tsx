@@ -72,6 +72,8 @@ interface Props {
   platform: 'all' | 'shopee' | 'tiktok';
   hasShopee: boolean;
   hasTikTok: boolean;
+  includeShipping: boolean;
+  onToggleShipping: (val: boolean) => void;
 }
 
 function mergeRevenue(a: RevenueData, b: RevenueData): RevenueData {
@@ -96,15 +98,11 @@ function mergeRevenue(a: RevenueData, b: RevenueData): RevenueData {
   };
 }
 
-export default function RevenueSection({ dateRange, refreshKey, platform, hasShopee, hasTikTok }: Props) {
+export default function RevenueSection({ dateRange, refreshKey, platform, hasShopee, hasTikTok, includeShipping, onToggleShipping }: Props) {
   const [data, setData] = useState<RevenueData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showOrders, setShowOrders] = useState(false);
-  const [includeShipping, setIncludeShipping] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return localStorage.getItem('tiktok-revenue-include-shipping') === 'true';
-  });
 
   async function load() {
     setLoading(true);
@@ -180,11 +178,7 @@ export default function RevenueSection({ dateRange, refreshKey, platform, hasSho
               Product
             </span>
             <button
-              onClick={() => {
-                const next = !includeShipping;
-                setIncludeShipping(next);
-                localStorage.setItem('tiktok-revenue-include-shipping', String(next));
-              }}
+              onClick={() => onToggleShipping(!includeShipping)}
               className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
                 includeShipping ? 'bg-orange-500' : 'bg-gray-200'
               }`}

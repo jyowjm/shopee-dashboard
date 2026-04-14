@@ -10,9 +10,10 @@ interface Props {
   platform: 'all' | 'shopee' | 'tiktok';
   hasShopee: boolean;
   hasTikTok: boolean;
+  includeTikTokShipping?: boolean;
 }
 
-export default function ProductsSection({ dateRange, refreshKey, platform, hasShopee, hasTikTok }: Props) {
+export default function ProductsSection({ dateRange, refreshKey, platform, hasShopee, hasTikTok, includeTikTokShipping }: Props) {
   const [products, setProducts] = useState<ProductData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,10 +27,12 @@ export default function ProductsSection({ dateRange, refreshKey, platform, hasSh
       const to = Math.floor(dateRange.to.getTime() / 1000);
       const qs = `from=${from}&to=${to}`;
 
+      const tiktokQs = `${qs}${includeTikTokShipping ? '&includeShipping=true' : ''}`;
+
       if (platform === 'all' && hasShopee && hasTikTok) {
         const [shopeeRes, tiktokRes] = await Promise.all([
           fetch(`/api/shopee/products?${qs}`),
-          fetch(`/api/tiktok/products?${qs}`),
+          fetch(`/api/tiktok/products?${tiktokQs}`),
         ]);
         const [s, t] = await Promise.all([shopeeRes.json(), tiktokRes.json()]);
         // Merge by item name (cross-platform products have different IDs)
@@ -46,7 +49,7 @@ export default function ProductsSection({ dateRange, refreshKey, platform, hasSh
         }
         setProducts(Array.from(nameMap.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 10));
       } else {
-        const url = platform === 'tiktok' ? `/api/tiktok/products?${qs}` : `/api/shopee/products?${qs}`;
+        const url = platform === 'tiktok' ? `/api/tiktok/products?${tiktokQs}` : `/api/shopee/products?${qs}`;
         const res = await fetch(url);
         if (res.status === 401) { throw new Error('Session expired — please reconnect your shop.'); }
         if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
@@ -60,7 +63,7 @@ export default function ProductsSection({ dateRange, refreshKey, platform, hasSh
     }
   }
 
-  useEffect(() => { load(); }, [dateRange, refreshKey]);
+  useEffect(() => { load(); }, [dateRange, refreshKey, includeTikTokShipping]);
 
   const sorted = [...products].sort((a, b) => b[sortBy] - a[sortBy]);
 
