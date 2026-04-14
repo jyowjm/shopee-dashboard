@@ -252,6 +252,45 @@ export interface TikTokOrderTransaction {
   sku_transactions:     TikTokSkuTransaction[];
 }
 
+/**
+ * One record from GET /finance/202507/orders/unsettled
+ * fee_tax_breakdown is at the transaction level (not inside sku_transactions).
+ * Affiliate field name differs from settled: `affiliate_commission_before_pit_amount`
+ * (settled uses `affiliate_commission_amount_before_pit`).
+ */
+export interface TikTokUnsettledTransaction {
+  type:                     string;  // 'ORDER' | 'ADJUSTMENT'
+  id:                       string;
+  status:                   string;
+  currency:                 string;
+  order_id:                 string;
+  order_create_time:        number;
+  est_settlement_amount:    string;  // estimated net payout
+  est_revenue_amount:       string;  // estimated item revenue
+  est_shipping_cost_amount: string;  // estimated shipping subsidy (negative)
+  est_fee_tax_amount:       string;  // estimated fee + tax total (negative)
+  fee_tax_breakdown?: {
+    fee: {
+      referral_fee_amount:                    string;
+      transaction_fee_amount:                 string;
+      affiliate_commission_before_pit_amount: string;  // different from settled!
+      sfp_service_fee_amount:                 string;
+      voucher_xtra_service_fee_amount:        string;
+      flash_sales_service_fee_amount:         string;
+      cofunded_promotion_service_fee_amount:  string;
+      live_specials_fee_amount:               string;
+      pre_order_service_fee_amount:           string;
+      [key: string]: string;
+    };
+    tax: {
+      sst_amount:  string;
+      vat_amount:  string;
+      gst_amount:  string;
+      [key: string]: string;
+    };
+  };
+}
+
 export interface TikTokProductSearchItem {
   id: string;
   title: string;

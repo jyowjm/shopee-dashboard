@@ -133,6 +133,9 @@ export interface FeesData {
   capped: boolean;
   prev_net_payout: number;
   prev_total_fees: number;
+  // TikTok-only — undefined for Shopee
+  has_estimates?:   boolean;  // true if unsettled orders are included in figures
+  unsettled_count?: number;   // number of unsettled orders contributing estimates
 }
 
 export interface AdsData {

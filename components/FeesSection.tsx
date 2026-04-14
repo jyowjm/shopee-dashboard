@@ -76,6 +76,8 @@ function mergeFees(a: FeesData, b: FeesData): FeesData {
     capped:          a.capped || b.capped,
     prev_net_payout: a.prev_net_payout + b.prev_net_payout,
     prev_total_fees: a.prev_total_fees + b.prev_total_fees,
+    has_estimates:   (a.has_estimates   ?? false) || (b.has_estimates   ?? false),
+    unsettled_count: (a.unsettled_count ?? 0)     + (b.unsettled_count ?? 0),
   };
 }
 
@@ -188,6 +190,12 @@ export default function FeesSection({ dateRange, refreshKey, platform, hasShopee
       {data?.capped && (
         <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-1.5 mb-4">
           Showing data for first 500 orders — narrow your date range for full accuracy.
+        </p>
+      )}
+
+      {data?.has_estimates && (
+        <p className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded px-3 py-1.5 mb-4">
+          Includes estimated fees for {data.unsettled_count} unsettled order{data.unsettled_count !== 1 ? 's' : ''} — figures will update once orders settle.
         </p>
       )}
 
