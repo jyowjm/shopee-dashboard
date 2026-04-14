@@ -59,11 +59,11 @@ export interface TikTokOrderDetail {
   line_items?: TikTokOrderLineItem[];
   payment?: {
     sub_total: string;                // item subtotal
-    shipping_fee: string;
+    shipping_fee?: string;
     platform_discount: string;
-    seller_discount: string;
+    seller_discount?: string;
     total_amount: string;             // buyer's final payment
-    original_total_product_price: string;
+    original_total_product_price?: string;
   };
 }
 

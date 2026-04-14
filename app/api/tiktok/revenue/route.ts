@@ -26,23 +26,28 @@ const EXCLUDED_STATUSES = new Set([
 ]);
 
 /**
- * Revenue for one order = sum of (sale_price × quantity) across line items.
- * Falls back to payment.sub_total if line_items are empty.
- * This matches Shopee's approach: model_discounted_price × quantity (item-level
- * revenue, excluding shipping and platform discounts).
+ * Product Revenue = MSRP − seller discounts.
+ * Platform discounts excluded (TikTok absorbs them).
+ * Falls back to payment.sub_total if original_total_product_price is missing.
  */
-function calcOrderRevenue(o: {
-  line_items?: Array<{ sale_price?: string; quantity?: number }>;
-  payment?: { sub_total?: string };
+function calcProductRevenue(o: {
+  payment?: { original_total_product_price?: string; seller_discount?: string; sub_total?: string };
 }): number {
-  const lineTotal = (o.line_items ?? []).reduce((sum, item) => {
-    const price = parseFloat(item.sale_price ?? '0') || 0;
-    const qty   = item.quantity ?? 0;
-    return sum + price * qty;
-  }, 0);
-  if (lineTotal > 0) return lineTotal;
-  // Fallback: use sub_total from payment (item prices after seller discounts)
+  const original = parseFloat(o.payment?.original_total_product_price ?? '0') || 0;
+  const sellerDiscount = parseFloat(o.payment?.seller_discount ?? '0') || 0;
+  if (original > 0) return original - sellerDiscount;
+  // Fallback: sub_total already has seller discounts applied
   return parseFloat(o.payment?.sub_total ?? '0') || 0;
+}
+
+/**
+ * Shipping Revenue = buyer's paid shipping fee (net of platform shipping discounts).
+ * TikTok's payment.shipping_fee already reflects the net amount the buyer paid.
+ */
+function calcShippingRevenue(o: {
+  payment?: { shipping_fee?: string };
+}): number {
+  return parseFloat(o.payment?.shipping_fee ?? '0') || 0;
 }
 
 export async function GET(req: NextRequest) {
@@ -80,35 +85,46 @@ export async function GET(req: NextRequest) {
       fetchTikTokOrderDetails(activePrevIds),
     ]);
 
-    // Build daily revenue map using line_items (consistent with Shopee item-level approach)
-    const dailyMap = new Map<string, number>();
-    let totalRevenue = 0;
+    // Build daily revenue map capturing product and shipping components separately
+    const dailyMap = new Map<string, { product: number; shipping: number }>();
+    let totalProductRevenue = 0;
+    let totalShippingRevenue = 0;
     const orderRows: RevenueData['orders'] = [];
 
     for (const o of details) {
-      const amount = calcOrderRevenue(o);
-      const date   = toMytDate(o.create_time);
-      dailyMap.set(date, (dailyMap.get(date) ?? 0) + amount);
-      totalRevenue += amount;
-      orderRows.push({ order_sn: o.id, date, status: o.status, amount });
+      const product  = calcProductRevenue(o);
+      const shipping = calcShippingRevenue(o);
+      const date     = toMytDate(o.create_time);
+      const prev     = dailyMap.get(date) ?? { product: 0, shipping: 0 };
+      dailyMap.set(date, { product: prev.product + product, shipping: prev.shipping + shipping });
+      totalProductRevenue  += product;
+      totalShippingRevenue += shipping;
+      orderRows.push({ order_sn: o.id, date, status: o.status, amount: product, shipping_amount: shipping });
     }
 
     const daily = Array.from(dailyMap.entries())
-      .map(([date, revenue]) => ({ date, revenue }))
+      .map(([date, { product, shipping }]) => ({ date, revenue: product, shipping_revenue: shipping }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
     orderRows.sort((a, b) => b.date.localeCompare(a.date));
 
-    const prevTotalRevenue = prevDetails.reduce((sum, o) => sum + calcOrderRevenue(o), 0);
+    let prevTotalProductRevenue  = 0;
+    let prevTotalShippingRevenue = 0;
+    for (const o of prevDetails) {
+      prevTotalProductRevenue  += calcProductRevenue(o);
+      prevTotalShippingRevenue += calcShippingRevenue(o);
+    }
 
     const result: RevenueData = {
-      total_revenue:    totalRevenue,
-      order_count:      details.length,
+      total_revenue:               totalProductRevenue,   // product only — keeps mergeRevenue working
+      order_count:                 details.length,
       daily,
-      orders:           orderRows,
+      orders:                      orderRows,
       capped,
-      prev_total_revenue: prevTotalRevenue,
-      prev_order_count:   prevDetails.length,
+      prev_total_revenue:          prevTotalProductRevenue,
+      prev_order_count:            prevDetails.length,
+      total_shipping_revenue:      totalShippingRevenue,
+      prev_total_shipping_revenue: prevTotalShippingRevenue,
     };
 
     return NextResponse.json(result);

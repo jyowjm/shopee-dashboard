@@ -83,6 +83,8 @@ function mergeRevenue(a: RevenueData, b: RevenueData): RevenueData {
     .map(([date, revenue]) => ({ date, revenue }))
     .sort((x, y) => x.date.localeCompare(y.date));
 
+  // Shipping fields (TikTok-only) are not forwarded — the shipping toggle only shows
+  // when platform === 'tiktok', so the merged 'all platforms' view never needs them.
   return {
     total_revenue:       a.total_revenue + b.total_revenue,
     order_count:         a.order_count   + b.order_count,
@@ -99,6 +101,10 @@ export default function RevenueSection({ dateRange, refreshKey, platform, hasSho
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showOrders, setShowOrders] = useState(false);
+  const [includeShipping, setIncludeShipping] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('tiktok-revenue-include-shipping') === 'true';
+  });
 
   async function load() {
     setLoading(true);
@@ -136,12 +142,66 @@ export default function RevenueSection({ dateRange, refreshKey, platform, hasSho
 
   useEffect(() => { load(); }, [dateRange, refreshKey]);
 
+  // Shipping fields are only present on TikTok responses
+  const shippingRevenue     = data?.total_shipping_revenue     ?? 0;
+  const prevShippingRevenue = data?.prev_total_shipping_revenue ?? 0;
+  const showShipping        = platform === 'tiktok' && includeShipping;
+  const displayRevenue      = (data?.total_revenue     ?? 0) + (showShipping ? shippingRevenue     : 0);
+  const prevDisplayRevenue  = (data?.prev_total_revenue ?? 0) + (showShipping ? prevShippingRevenue : 0);
+
+  const revenueLabel   = platform === 'tiktok' ? (includeShipping ? 'Gross revenue'   : 'Product revenue')   : 'Total revenue';
+  const revenueCaption = platform === 'tiktok'
+    ? (includeShipping
+        ? 'MSRP − seller discounts + buyer shipping · excl. platform discounts'
+        : 'MSRP − seller discounts · excl. platform discounts & shipping')
+    : null;
+  const tooltipLayman  = includeShipping
+    ? 'Everything customers paid us — products and shipping — before TikTok subsidised anything.'
+    : 'What customers paid us for the products, before TikTok subsidised anything.';
+  const tooltipFormula = includeShipping
+    ? 'Formula: MSRP − seller discounts + buyer shipping fee. Platform discounts excluded.'
+    : 'Formula: MSRP − seller discounts. Platform discounts excluded.';
+
+  const chartData = (data?.daily ?? []).map(d => ({
+    ...d,
+    revenue: d.revenue + (showShipping ? (d.shipping_revenue ?? 0) : 0),
+  }));
+
   if (loading) return <SectionSkeleton title="Revenue" />;
   if (error) return <SectionError title="Revenue" message={error} onRetry={load} />;
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">
-      <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-4">Revenue</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Revenue</h2>
+        {platform === 'tiktok' && (
+          <div className="flex items-center gap-1.5">
+            <span className={`text-xs font-semibold ${!includeShipping ? 'text-orange-600' : 'text-gray-400'}`}>
+              Product
+            </span>
+            <button
+              onClick={() => {
+                const next = !includeShipping;
+                setIncludeShipping(next);
+                localStorage.setItem('tiktok-revenue-include-shipping', String(next));
+              }}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                includeShipping ? 'bg-orange-500' : 'bg-gray-200'
+              }`}
+              aria-label="Include buyer shipping in revenue"
+            >
+              <span
+                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                  includeShipping ? 'translate-x-4' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+            <span className={`text-xs font-semibold ${includeShipping ? 'text-orange-600' : 'text-gray-400'}`}>
+              + Ship
+            </span>
+          </div>
+        )}
+      </div>
       {data?.capped && (
         <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-1.5 mb-4">
           Showing data for first 500 orders — narrow your date range for full accuracy.
@@ -151,10 +211,25 @@ export default function RevenueSection({ dateRange, refreshKey, platform, hasSho
         {(() => { const periodLabel = getPrevPeriodLabel(dateRange); return (<>
         <div>
           <div className="flex items-start gap-2">
-            <p className="text-3xl font-bold text-gray-900">RM {data?.total_revenue.toFixed(2)}</p>
-            {data && <DeltaBadge current={data.total_revenue} previous={data.prev_total_revenue} periodLabel={periodLabel} />}
+            <p className="text-3xl font-bold text-gray-900">RM {displayRevenue.toFixed(2)}</p>
+            {data && <DeltaBadge current={displayRevenue} previous={prevDisplayRevenue} periodLabel={periodLabel} />}
           </div>
-          <p className="text-sm text-gray-500 mt-1">Total revenue</p>
+          <div className="flex items-center gap-1 mt-1">
+            <p className="text-sm text-gray-500">{revenueLabel}</p>
+            {platform === 'tiktok' && (
+              <div className="relative group">
+                <span className="text-xs text-gray-300 cursor-default border-b border-dotted border-gray-300 leading-none">ℹ</span>
+                <div className="absolute left-5 top-0 z-10 hidden group-hover:block w-60 bg-gray-900 text-white rounded-lg p-3 text-xs shadow-xl">
+                  <p className="font-semibold mb-1.5">💡 What is {revenueLabel}?</p>
+                  <p className="text-gray-300 mb-2 leading-relaxed">{tooltipLayman}</p>
+                  <p className="text-gray-500 border-t border-gray-700 pt-2 leading-relaxed">{tooltipFormula}</p>
+                </div>
+              </div>
+            )}
+          </div>
+          {revenueCaption && (
+            <p className="text-xs text-gray-300 italic mt-0.5">{revenueCaption}</p>
+          )}
         </div>
         <div>
           <div className="flex items-start gap-2">
@@ -166,7 +241,7 @@ export default function RevenueSection({ dateRange, refreshKey, platform, hasSho
         </>); })()}
       </div>
       <ResponsiveContainer width="100%" height={200}>
-        <LineChart data={data?.daily ?? []}>
+        <LineChart data={chartData}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
           <XAxis dataKey="date" tick={{ fontSize: 12 }} tickFormatter={d => format(new Date(d), 'MMM d')} />
           <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `RM ${v}`} />
@@ -191,7 +266,9 @@ export default function RevenueSection({ dateRange, refreshKey, platform, hasSho
                   <th className="pb-2 font-medium">Order</th>
                   <th className="pb-2 font-medium">Date</th>
                   <th className="pb-2 font-medium">Status</th>
-                  <th className="pb-2 font-medium text-right">Amount</th>
+                  <th className="pb-2 font-medium text-right">
+                    {platform === 'tiktok' ? (showShipping ? 'Gross Revenue' : 'Product Revenue') : 'Amount'}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -202,14 +279,16 @@ export default function RevenueSection({ dateRange, refreshKey, platform, hasSho
                     <td className={`py-2 text-xs font-medium ${STATUS_COLORS[o.status] ?? 'text-gray-500'}`}>
                       {o.status?.replace(/_/g, ' ')}
                     </td>
-                    <td className="py-2 text-right font-medium">RM {o.amount.toFixed(2)}</td>
+                    <td className="py-2 text-right font-medium">
+                      RM {(o.amount + (showShipping ? (o.shipping_amount ?? 0) : 0)).toFixed(2)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-gray-200">
                   <td colSpan={3} className="pt-2 text-sm font-semibold text-gray-700">Total</td>
-                  <td className="pt-2 text-right font-bold text-gray-900">RM {data!.total_revenue.toFixed(2)}</td>
+                  <td className="pt-2 text-right font-bold text-gray-900">RM {displayRevenue.toFixed(2)}</td>
                 </tr>
               </tfoot>
             </table>
