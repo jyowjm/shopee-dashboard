@@ -58,15 +58,19 @@ function aggregateFees(statements: TikTokStatement[]) {
   let net_payout    = 0;
   let gross_revenue = 0;
   let total_fees    = 0;
+  let shipping_fee  = 0;
+  let adjustment    = 0;
 
   for (const s of statements) {
     gross_revenue += parseAmt(s.revenue_amount);
     total_fees    += Math.abs(parseAmt(s.fee_amount));
     net_payout    += parseAmt(s.settlement_amount);
+    shipping_fee  += Math.abs(parseAmt(s.shipping_cost_amount));
+    adjustment    += parseAmt(s.adjustment_amount);
   }
 
   const fee_rate = gross_revenue > 0 ? (total_fees / gross_revenue) * 100 : 0;
-  return { net_payout, gross_revenue, total_fees, fee_rate };
+  return { net_payout, gross_revenue, total_fees, fee_rate, shipping_fee, adjustment };
 }
 
 export async function GET(req: NextRequest) {
@@ -107,9 +111,11 @@ export async function GET(req: NextRequest) {
       total_fees:     current.total_fees,
       fee_rate:       current.fee_rate,
       breakdown: {
-        commission_fee:  current.total_fees,  // fee_amount covers all platform fees
-        service_fee:     0,
-        transaction_fee: 0,
+        commission_fee:  current.total_fees,       // fee_amount = all platform fees bundled
+        service_fee:     0,                        // not separated by TikTok API
+        transaction_fee: 0,                        // not separated by TikTok API
+        shipping_fee:    current.shipping_fee,     // abs(shipping_cost_amount)
+        adjustment:      current.adjustment,       // adjustment_amount (net; can be negative)
       },
       capped:          false,
       prev_net_payout: prev.net_payout,

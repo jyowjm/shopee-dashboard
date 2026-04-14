@@ -68,6 +68,8 @@ function mergeFees(a: FeesData, b: FeesData): FeesData {
       commission_fee:  a.breakdown.commission_fee  + b.breakdown.commission_fee,
       service_fee:     a.breakdown.service_fee     + b.breakdown.service_fee,
       transaction_fee: a.breakdown.transaction_fee + b.breakdown.transaction_fee,
+      shipping_fee:    a.breakdown.shipping_fee    + b.breakdown.shipping_fee,
+      adjustment:      a.breakdown.adjustment      + b.breakdown.adjustment,
     },
     capped:          a.capped || b.capped,
     prev_net_payout: a.prev_net_payout + b.prev_net_payout,
@@ -137,12 +139,40 @@ export default function FeesSection({ dateRange, refreshKey, platform, hasShopee
   const periodLabel = getPrevPeriodLabel(dateRange);
   const rm = (n: number) => `RM ${n.toFixed(2)}`;
 
-  const breakdownRows = data ? [
-    { label: 'Commission Fee',                         value: data.breakdown.commission_fee },
-    ...(data.breakdown.service_fee > 0
-      ? [{ label: 'Service Fee', value: data.breakdown.service_fee }]
+  // Fee rows — these sum to total_fees
+  const feeRows: { label: string; value: number }[] = data ? (() => {
+    if (platform === 'tiktok') {
+      return [{ label: 'Platform Fees', value: data.breakdown.commission_fee }];
+    }
+    if (platform === 'shopee') {
+      return [
+        { label: 'Commission Fee',            value: data.breakdown.commission_fee },
+        ...(data.breakdown.service_fee > 0
+          ? [{ label: 'Service Fee',          value: data.breakdown.service_fee }]
+          : []),
+        { label: 'Transaction / Payment Fee', value: data.breakdown.transaction_fee },
+      ];
+    }
+    // all platforms
+    return [
+      { label: 'Commission / Platform Fees', value: data.breakdown.commission_fee },
+      ...(data.breakdown.service_fee > 0
+        ? [{ label: 'Service Fee (Shopee)',   value: data.breakdown.service_fee }]
+        : []),
+      ...(data.breakdown.transaction_fee > 0
+        ? [{ label: 'Transaction Fee (Shopee)', value: data.breakdown.transaction_fee }]
+        : []),
+    ];
+  })() : [];
+
+  // Other settlement items (TikTok-specific) — not included in total_fees
+  const otherRows: { label: string; value: number }[] = data ? [
+    ...(data.breakdown.shipping_fee > 0
+      ? [{ label: 'Shipping', value: data.breakdown.shipping_fee }]
       : []),
-    { label: 'Transaction / Platform Fee',             value: data.breakdown.transaction_fee },
+    ...(data.breakdown.adjustment !== 0
+      ? [{ label: 'Adjustments', value: data.breakdown.adjustment }]
+      : []),
   ] : [];
 
   return (
@@ -187,7 +217,7 @@ export default function FeesSection({ dateRange, refreshKey, platform, hasShopee
       {showBreakdown && (
         <table className="w-full text-sm mt-3 max-w-sm">
           <tbody>
-            {breakdownRows.map(({ label, value }) => (
+            {feeRows.map(({ label, value }) => (
               <tr key={label} className="border-b border-gray-50 last:border-0">
                 <td className="py-1.5 text-gray-600">{label}</td>
                 <td className="py-1.5 text-right font-medium text-gray-900">{rm(value)}</td>
@@ -199,6 +229,23 @@ export default function FeesSection({ dateRange, refreshKey, platform, hasShopee
               <td className="pt-2 text-sm font-semibold text-gray-700">Total Fees</td>
               <td className="pt-2 text-right font-bold text-gray-900">{rm(data?.total_fees ?? 0)}</td>
             </tr>
+            {otherRows.length > 0 && (
+              <>
+                <tr>
+                  <td colSpan={2} className="pt-4 pb-1 text-xs font-medium text-gray-400 uppercase tracking-wide">
+                    Other Settlement Items
+                  </td>
+                </tr>
+                {otherRows.map(({ label, value }) => (
+                  <tr key={label}>
+                    <td className="py-1 text-gray-600">{label}</td>
+                    <td className={`py-1 text-right font-medium ${value < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                      {value < 0 ? `−${rm(Math.abs(value))}` : rm(value)}
+                    </td>
+                  </tr>
+                ))}
+              </>
+            )}
           </tfoot>
         </table>
       )}

@@ -120,9 +120,13 @@ export interface FeesData {
   total_fees: number;       // commission + service + transaction fees
   fee_rate: number;         // total_fees / gross_revenue * 100
   breakdown: {
+    // Shopee: separate fee types. TikTok: commission_fee = all platform fees (bundled).
     commission_fee: number;
     service_fee: number;
-    transaction_fee: number;  // seller_transaction_fee
+    transaction_fee: number;    // seller_transaction_fee
+    // TikTok-only (0 for Shopee): pulled from GET Statements settlement fields
+    shipping_fee: number;       // abs(shipping_cost_amount) — logistics deduction
+    adjustment: number;         // adjustment_amount — net (positive = platform credit, negative = deduction)
   };
   capped: boolean;
   prev_net_payout: number;
