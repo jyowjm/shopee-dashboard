@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { loadTikTokTokens, saveTikTokTokens } from '@/lib/kv';
-import { getAuthorizedShops } from '@/lib/tiktok';
+import { getAuthorizedShops, callTikTok } from '@/lib/tiktok';
 
 /**
  * Debug endpoint — returns stored TikTok token metadata (NOT the actual tokens).
@@ -37,6 +37,25 @@ export async function GET() {
     shopsResult = { error: (e as Error).message };
   }
 
+  // Finance API diagnostic — tests GET Statements for the last 7 days
+  let financeDiagnostic: unknown;
+  try {
+    const nowSec      = Math.floor(Date.now() / 1000);
+    const sevenDaysAgo = nowSec - 7 * 24 * 3600;
+
+    const stmtData = await callTikTok<unknown>(
+      '/finance/202309/statements',
+      {
+        create_time_ge: String(sevenDaysAgo),
+        create_time_lt: String(nowSec),
+        page_size:      '5',
+      }
+    );
+    financeDiagnostic = { statements_raw: stmtData };
+  } catch (e) {
+    financeDiagnostic = { error: (e as Error).message };
+  }
+
   return NextResponse.json({
     connected: true,
     shop_id:        tokens.shop_id,
@@ -49,5 +68,6 @@ export async function GET() {
     ttl_minutes:    Math.round((tokens.expires_at - now) / 60_000),
     shops_api:      shopsResult,
     cipher_patched: cipherPatched,
+    finance_diagnostic: financeDiagnostic,
   });
 }

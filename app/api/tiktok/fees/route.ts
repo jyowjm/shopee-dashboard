@@ -1,17 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { subMonths } from 'date-fns';
-import { fetchTikTokOrderList } from '@/lib/tiktok-orders';
 import { callTikTok } from '@/lib/tiktok';
-import type { TikTokApiError, TikTokOrderStatement } from '@/types/tiktok';
+import type {
+  TikTokApiError,
+  TikTokStatement,
+  TikTokStatementTransaction,
+} from '@/types/tiktok';
 import type { FeesData } from '@/types/shopee';
 
 const MYT_OFFSET_MS = 8 * 60 * 60 * 1000;
-
-// Only settled (COMPLETED) orders have statement_transaction records
-const SETTLED_STATUSES = new Set(['COMPLETED', 'DELIVERED']);
-
-// Max orders to fetch statement data for — avoids excessive API calls
-const STATEMENT_CAP = 50;
 
 function subOneMonthMyt(unixSeconds: number): number {
   const mytDate = new Date(unixSeconds * 1000 + MYT_OFFSET_MS);
@@ -25,43 +22,76 @@ function parseAmt(val: string | undefined | null): number {
 }
 
 /**
- * Fetch the statement transactions for a single settled order.
- * Uses GET /finance/202501/orders/{order_id}/statement_transactions
- * Available for all regions (including SEA Malaysia).
- * Returns null if the order is not yet settled.
+ * Fetch all daily statement records for a date range.
+ * Uses GET /finance/202309/statements — only settled orders appear here.
  */
-async function fetchOrderStatement(orderId: string): Promise<TikTokOrderStatement | null> {
-  try {
-    const data = await callTikTok<TikTokOrderStatement>(
-      `/finance/202501/orders/${orderId}/statement_transactions`,
-      {}
+async function fetchTikTokStatements(from: number, to: number): Promise<TikTokStatement[]> {
+  const all: TikTokStatement[] = [];
+  let pageToken = '';
+
+  do {
+    const query: Record<string, string> = {
+      create_time_ge: String(from),
+      create_time_lt: String(to),
+      page_size: '100',
+      ...(pageToken ? { page_token: pageToken } : {}),
+    };
+
+    const data = await callTikTok<{ statements?: TikTokStatement[]; next_page_token?: string }>(
+      '/finance/202309/statements',
+      query
     );
-    return data;
-  } catch {
-    // Order not settled yet — return null (treat as no fees data)
-    return null;
-  }
+
+    all.push(...(data.statements ?? []));
+    pageToken = data.next_page_token ?? '';
+  } while (pageToken);
+
+  return all;
 }
 
 /**
- * Fetch statement data for a batch of order IDs in parallel.
- * Returns only the records that have been settled.
+ * Fetch all order-level transactions for a single statement.
+ * Uses GET /finance/202501/statements/{id}/statement_transactions
  */
-async function fetchStatements(orderIds: string[]): Promise<TikTokOrderStatement[]> {
-  const results = await Promise.all(orderIds.map(id => fetchOrderStatement(id)));
-  return results.filter((r): r is TikTokOrderStatement => r !== null);
+async function fetchStatementTransactions(
+  statementId: string
+): Promise<TikTokStatementTransaction[]> {
+  const all: TikTokStatementTransaction[] = [];
+  let pageToken = '';
+
+  do {
+    const query: Record<string, string> = {
+      sort_field: 'order_create_time',
+      sort_order: 'DESC',
+      page_size: '100',
+      ...(pageToken ? { page_token: pageToken } : {}),
+    };
+
+    const data = await callTikTok<{
+      transactions?: TikTokStatementTransaction[];
+      next_page_token?: string;
+    }>(
+      `/finance/202501/statements/${statementId}/statement_transactions`,
+      query
+    );
+
+    all.push(...(data.transactions ?? []));
+    pageToken = data.next_page_token ?? '';
+  } while (pageToken);
+
+  return all;
 }
 
-function aggregateFees(statements: TikTokOrderStatement[]) {
-  let net_payout      = 0;
-  let gross_revenue   = 0;
-  let total_fees      = 0;
+function aggregateFees(transactions: TikTokStatementTransaction[]) {
+  let net_payout    = 0;
+  let gross_revenue = 0;
+  let total_fees    = 0;
 
-  for (const s of statements) {
-    gross_revenue += parseAmt(s.revenue_amount);
+  for (const t of transactions) {
+    gross_revenue += parseAmt(t.revenue_amount);
     // fee_and_tax_amount is negative — take absolute value for "fees charged"
-    total_fees    += Math.abs(parseAmt(s.fee_and_tax_amount));
-    net_payout    += parseAmt(s.settlement_amount);
+    total_fees    += Math.abs(parseAmt(t.fee_and_tax_amount));
+    net_payout    += parseAmt(t.settlement_amount);
   }
 
   const fee_rate = gross_revenue > 0 ? (total_fees / gross_revenue) * 100 : 0;
@@ -90,30 +120,21 @@ export async function GET(req: NextRequest) {
       prevTo   = from;
     }
 
-    // Fetch order lists for both periods
-    const [{ orders: currentList, capped }, { orders: prevList }] = await Promise.all([
-      fetchTikTokOrderList(from, to, 500),
-      fetchTikTokOrderList(prevFrom, prevTo, 500),
-    ]);
-
-    // Only completed/delivered orders have settled statements
-    const settledIds     = currentList
-      .filter(o => SETTLED_STATUSES.has(o.status))
-      .slice(0, STATEMENT_CAP)
-      .map(o => o.id);
-    const settledPrevIds = prevList
-      .filter(o => SETTLED_STATUSES.has(o.status))
-      .slice(0, STATEMENT_CAP)
-      .map(o => o.id);
-
-    // Fetch statement data for both periods in parallel
+    // Fetch statements for both periods in parallel
+    // Statements only contain settled orders — no status filtering needed
     const [currentStatements, prevStatements] = await Promise.all([
-      fetchStatements(settledIds),
-      fetchStatements(settledPrevIds),
+      fetchTikTokStatements(from, to),
+      fetchTikTokStatements(prevFrom, prevTo),
     ]);
 
-    const current = aggregateFees(currentStatements);
-    const prev    = aggregateFees(prevStatements);
+    // Fetch all transactions for each statement in parallel
+    const [currentTxns, prevTxns] = await Promise.all([
+      Promise.all(currentStatements.map(s => fetchStatementTransactions(s.id))),
+      Promise.all(prevStatements.map(s => fetchStatementTransactions(s.id))),
+    ]);
+
+    const current = aggregateFees(currentTxns.flat());
+    const prev    = aggregateFees(prevTxns.flat());
 
     const result: FeesData = {
       net_payout:     current.net_payout,
@@ -125,7 +146,7 @@ export async function GET(req: NextRequest) {
         service_fee:     0,
         transaction_fee: 0,
       },
-      capped,
+      capped:          false,
       prev_net_payout: prev.net_payout,
       prev_total_fees: prev.total_fees,
     };

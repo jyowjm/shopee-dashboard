@@ -179,6 +179,25 @@ export interface TikTokOrderStatement {
   settlement_amount: string;      // net payout to seller
 }
 
+/** One daily statement record from GET /finance/202309/statements */
+export interface TikTokStatement {
+  id: string;
+  [key: string]: unknown;
+}
+
+/**
+ * One order-level transaction from
+ * GET /finance/202501/statements/{id}/statement_transactions
+ * Field names mirror TikTokOrderStatement (same endpoint family).
+ */
+export interface TikTokStatementTransaction {
+  order_id?: string;
+  revenue_amount: string;       // positive; item revenue
+  fee_and_tax_amount: string;   // negative; platform fees + taxes
+  settlement_amount: string;    // net payout to seller
+  [key: string]: unknown;
+}
+
 export interface TikTokProductSearchItem {
   id: string;
   title: string;
