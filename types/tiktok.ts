@@ -208,6 +208,50 @@ export interface TikTokStatementTransaction {
   [key: string]: unknown;
 }
 
+/**
+ * SKU-level fee and tax breakdown from
+ * GET /finance/202501/orders/{order_id}/statement_transactions
+ */
+export interface TikTokFeeTaxBreakdown {
+  fee: {
+    referral_fee_amount:                    string;  // main platform commission
+    transaction_fee_amount:                 string;  // payment processing
+    affiliate_commission_amount_before_pit: string;  // creator/affiliate commission
+    affiliate_partner_commission_amount:    string;
+    affiliate_ads_commission_amount:        string;
+    sfp_service_fee_amount:                 string;
+    voucher_xtra_service_fee_amount:        string;
+    flash_sales_service_fee_amount:         string;
+    cofunded_promotion_service_fee_amount:  string;
+    live_specials_fee_amount:               string;
+    pre_order_service_fee_amount:           string;
+    [key: string]: string;
+  };
+  tax: {
+    sst_amount:   string;   // Malaysia SST
+    vat_amount:   string;
+    gst_amount:   string;
+    [key: string]: string;
+  };
+}
+
+export interface TikTokSkuTransaction {
+  sku_id:             string;
+  fee_tax_amount:     string;
+  fee_tax_breakdown?: TikTokFeeTaxBreakdown;
+  [key: string]: unknown;
+}
+
+/** Response from GET /finance/202501/orders/{order_id}/statement_transactions */
+export interface TikTokOrderTransaction {
+  order_id:             string;
+  revenue_amount:       string;
+  settlement_amount:    string;
+  fee_and_tax_amount:   string;
+  shipping_cost_amount: string;
+  sku_transactions:     TikTokSkuTransaction[];
+}
+
 export interface TikTokProductSearchItem {
   id: string;
   title: string;

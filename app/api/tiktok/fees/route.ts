@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { subMonths } from 'date-fns';
 import { callTikTok } from '@/lib/tiktok';
-import type { TikTokApiError, TikTokStatement } from '@/types/tiktok';
+import type {
+  TikTokApiError,
+  TikTokStatement,
+  TikTokStatementTransaction,
+  TikTokOrderTransaction,
+} from '@/types/tiktok';
 import type { FeesData } from '@/types/shopee';
 
 const MYT_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+// Max settled orders to fetch fee_tax_breakdown for per period
+const ORDER_CAP = 100;
 
 function subOneMonthMyt(unixSeconds: number): number {
   const mytDate = new Date(unixSeconds * 1000 + MYT_OFFSET_MS);
@@ -17,13 +25,7 @@ function parseAmt(val: string | undefined | null): number {
   return parseFloat(val) || 0;
 }
 
-/**
- * Fetch all daily statement records for a date range.
- * Uses GET /finance/202309/statements — only settled orders appear here.
- *
- * Date params: statement_time_ge / statement_time_lt (Unix seconds).
- * sort_field "statement_time" is required by the API.
- */
+/** Fetch all daily statement records for a date range. */
 async function fetchTikTokStatements(from: number, to: number): Promise<TikTokStatement[]> {
   const all: TikTokStatement[] = [];
   let pageToken = '';
@@ -51,26 +53,153 @@ async function fetchTikTokStatements(from: number, to: number): Promise<TikTokSt
 }
 
 /**
- * Aggregate fee totals directly from statement-level records.
- * Each statement already contains revenue_amount, fee_amount, settlement_amount.
+ * Fetch all order IDs settled under a given statement.
+ * Uses GET /finance/202501/statements/{id}/statement_transactions
  */
-function aggregateFees(statements: TikTokStatement[]) {
+async function fetchStatementOrderIds(statementId: string): Promise<string[]> {
+  const ids: string[] = [];
+  let pageToken = '';
+
+  do {
+    const query: Record<string, string> = {
+      sort_field: 'order_create_time',
+      sort_order: 'DESC',
+      page_size:  '100',
+      ...(pageToken ? { page_token: pageToken } : {}),
+    };
+
+    const data = await callTikTok<{
+      transactions?: TikTokStatementTransaction[];
+      next_page_token?: string;
+    }>(
+      `/finance/202501/statements/${statementId}/statement_transactions`,
+      query
+    );
+
+    for (const t of data.transactions ?? []) {
+      if (t.order_id) ids.push(t.order_id as string);
+    }
+    pageToken = data.next_page_token ?? '';
+  } while (pageToken);
+
+  return ids;
+}
+
+/**
+ * Fetch SKU-level fee_tax_breakdown for a single order.
+ * Uses GET /finance/202501/orders/{order_id}/statement_transactions
+ * Returns null if the order has no settled record.
+ */
+async function fetchOrderTransaction(orderId: string): Promise<TikTokOrderTransaction | null> {
+  try {
+    return await callTikTok<TikTokOrderTransaction>(
+      `/finance/202501/orders/${orderId}/statement_transactions`,
+      {}
+    );
+  } catch {
+    return null;
+  }
+}
+
+interface AggregateResult {
+  net_payout:    number;
+  gross_revenue: number;
+  total_fees:    number;
+  fee_rate:      number;
+  referral:      number;
+  transaction:   number;
+  affiliate:     number;
+  service:       number;
+  tax:           number;
+  shipping_fee:  number;
+}
+
+function aggregateFees(
+  orderTxns: TikTokOrderTransaction[],
+  shippingFromStatements: number,
+  adjustmentFromStatements: number
+): AggregateResult & { adjustment: number } {
   let net_payout    = 0;
   let gross_revenue = 0;
-  let total_fees    = 0;
+  let referral      = 0;
+  let transaction   = 0;
+  let affiliate     = 0;
+  let service       = 0;
+  let tax           = 0;
   let shipping_fee  = 0;
-  let adjustment    = 0;
 
-  for (const s of statements) {
-    gross_revenue += parseAmt(s.revenue_amount);
-    total_fees    += Math.abs(parseAmt(s.fee_amount));
-    net_payout    += parseAmt(s.settlement_amount);
-    shipping_fee  += Math.abs(parseAmt(s.shipping_cost_amount));
-    adjustment    += parseAmt(s.adjustment_amount);
+  for (const order of orderTxns) {
+    gross_revenue += parseAmt(order.revenue_amount);
+    net_payout    += parseAmt(order.settlement_amount);
+    shipping_fee  += Math.abs(parseAmt(order.shipping_cost_amount));
+
+    for (const sku of order.sku_transactions ?? []) {
+      const fee  = sku.fee_tax_breakdown?.fee;
+      const taxB = sku.fee_tax_breakdown?.tax;
+
+      if (fee) {
+        referral    += Math.abs(parseAmt(fee.referral_fee_amount));
+        transaction += Math.abs(parseAmt(fee.transaction_fee_amount));
+        affiliate   += Math.abs(parseAmt(fee.affiliate_commission_amount_before_pit));
+        service     += Math.abs(parseAmt(fee.sfp_service_fee_amount))
+                     + Math.abs(parseAmt(fee.voucher_xtra_service_fee_amount))
+                     + Math.abs(parseAmt(fee.flash_sales_service_fee_amount))
+                     + Math.abs(parseAmt(fee.cofunded_promotion_service_fee_amount))
+                     + Math.abs(parseAmt(fee.live_specials_fee_amount))
+                     + Math.abs(parseAmt(fee.pre_order_service_fee_amount));
+      }
+
+      if (taxB) {
+        tax += Math.abs(parseAmt(taxB.sst_amount))
+             + Math.abs(parseAmt(taxB.vat_amount))
+             + Math.abs(parseAmt(taxB.gst_amount));
+      }
+    }
   }
 
-  const fee_rate = gross_revenue > 0 ? (total_fees / gross_revenue) * 100 : 0;
-  return { net_payout, gross_revenue, total_fees, fee_rate, shipping_fee, adjustment };
+  // Fall back to statement-level shipping if order-level returns 0
+  // (happens when no order transactions are fetched e.g. all capped out)
+  if (shipping_fee === 0 && shippingFromStatements > 0) {
+    shipping_fee = shippingFromStatements;
+  }
+
+  const total_fees = referral + transaction + affiliate + service + tax;
+  const fee_rate   = gross_revenue > 0 ? (total_fees / gross_revenue) * 100 : 0;
+
+  return {
+    net_payout, gross_revenue, total_fees, fee_rate,
+    referral, transaction, affiliate, service, tax,
+    shipping_fee, adjustment: adjustmentFromStatements,
+  };
+}
+
+async function fetchFeesForPeriod(from: number, to: number): Promise<{
+  agg: ReturnType<typeof aggregateFees>;
+  capped: boolean;
+}> {
+  // 1. Fetch statements for the date range
+  const statements = await fetchTikTokStatements(from, to);
+
+  // Statement-level fallback values for shipping + adjustment
+  const shippingFromStatements = statements.reduce(
+    (sum, s) => sum + Math.abs(parseAmt(s.shipping_cost_amount as string)), 0
+  );
+  const adjustmentFromStatements = statements.reduce(
+    (sum, s) => sum + parseAmt(s.adjustment_amount as string), 0
+  );
+
+  // 2. Get all settled order IDs from every statement (parallel)
+  const orderIdSets = await Promise.all(statements.map(s => fetchStatementOrderIds(s.id)));
+  const allOrderIds = [...new Set(orderIdSets.flat())];
+
+  // 3. Cap and fetch order transactions in parallel
+  const capped    = allOrderIds.length > ORDER_CAP;
+  const orderIds  = allOrderIds.slice(0, ORDER_CAP);
+  const rawTxns   = await Promise.all(orderIds.map(id => fetchOrderTransaction(id)));
+  const orderTxns = rawTxns.filter((t): t is TikTokOrderTransaction => t !== null);
+
+  const agg = aggregateFees(orderTxns, shippingFromStatements, adjustmentFromStatements);
+  return { agg, capped };
 }
 
 export async function GET(req: NextRequest) {
@@ -95,29 +224,26 @@ export async function GET(req: NextRequest) {
       prevTo   = from;
     }
 
-    // Fetch statements for both periods in parallel.
-    // Statements only contain settled orders — no status-filtering needed.
-    const [currentStatements, prevStatements] = await Promise.all([
-      fetchTikTokStatements(from, to),
-      fetchTikTokStatements(prevFrom, prevTo),
+    const [{ agg: current, capped }, { agg: prev }] = await Promise.all([
+      fetchFeesForPeriod(from, to),
+      fetchFeesForPeriod(prevFrom, prevTo),
     ]);
 
-    const current = aggregateFees(currentStatements);
-    const prev    = aggregateFees(prevStatements);
-
     const result: FeesData = {
-      net_payout:     current.net_payout,
-      gross_revenue:  current.gross_revenue,
-      total_fees:     current.total_fees,
-      fee_rate:       current.fee_rate,
+      net_payout:    current.net_payout,
+      gross_revenue: current.gross_revenue,
+      total_fees:    current.total_fees,
+      fee_rate:      current.fee_rate,
       breakdown: {
-        commission_fee:  current.total_fees,       // fee_amount = all platform fees bundled
-        service_fee:     0,                        // not separated by TikTok API
-        transaction_fee: 0,                        // not separated by TikTok API
-        shipping_fee:    current.shipping_fee,     // abs(shipping_cost_amount)
-        adjustment:      current.adjustment,       // adjustment_amount (net; can be negative)
+        commission_fee:  current.referral,
+        service_fee:     current.service,
+        transaction_fee: current.transaction,
+        affiliate_fee:   current.affiliate,
+        tax_amount:      current.tax,
+        shipping_fee:    current.shipping_fee,
+        adjustment:      current.adjustment,
       },
-      capped:          false,
+      capped,
       prev_net_payout: prev.net_payout,
       prev_total_fees: prev.total_fees,
     };

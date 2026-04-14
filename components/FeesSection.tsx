@@ -68,6 +68,8 @@ function mergeFees(a: FeesData, b: FeesData): FeesData {
       commission_fee:  a.breakdown.commission_fee  + b.breakdown.commission_fee,
       service_fee:     a.breakdown.service_fee     + b.breakdown.service_fee,
       transaction_fee: a.breakdown.transaction_fee + b.breakdown.transaction_fee,
+      affiliate_fee:   a.breakdown.affiliate_fee   + b.breakdown.affiliate_fee,
+      tax_amount:      a.breakdown.tax_amount      + b.breakdown.tax_amount,
       shipping_fee:    a.breakdown.shipping_fee    + b.breakdown.shipping_fee,
       adjustment:      a.breakdown.adjustment      + b.breakdown.adjustment,
     },
@@ -142,7 +144,13 @@ export default function FeesSection({ dateRange, refreshKey, platform, hasShopee
   // Fee rows — these sum to total_fees
   const feeRows: { label: string; value: number }[] = data ? (() => {
     if (platform === 'tiktok') {
-      return [{ label: 'Platform Fees', value: data.breakdown.commission_fee }];
+      return ([
+        { label: 'Referral Fee',         value: data.breakdown.commission_fee },
+        { label: 'Transaction Fee',      value: data.breakdown.transaction_fee },
+        { label: 'Affiliate Commission', value: data.breakdown.affiliate_fee },
+        { label: 'Service Fees',         value: data.breakdown.service_fee },
+        { label: 'Tax (SST / VAT)',      value: data.breakdown.tax_amount },
+      ] as { label: string; value: number }[]).filter(r => r.value > 0);
     }
     if (platform === 'shopee') {
       return [
@@ -154,18 +162,16 @@ export default function FeesSection({ dateRange, refreshKey, platform, hasShopee
       ];
     }
     // all platforms
-    return [
-      { label: 'Commission / Platform Fees', value: data.breakdown.commission_fee },
-      ...(data.breakdown.service_fee > 0
-        ? [{ label: 'Service Fee (Shopee)',   value: data.breakdown.service_fee }]
-        : []),
-      ...(data.breakdown.transaction_fee > 0
-        ? [{ label: 'Transaction Fee (Shopee)', value: data.breakdown.transaction_fee }]
-        : []),
-    ];
+    return ([
+      { label: 'Commission / Referral Fee',   value: data.breakdown.commission_fee },
+      { label: 'Transaction Fee',             value: data.breakdown.transaction_fee },
+      { label: 'Service Fees',                value: data.breakdown.service_fee },
+      { label: 'Affiliate Commission',        value: data.breakdown.affiliate_fee },
+      { label: 'Tax (SST / VAT)',             value: data.breakdown.tax_amount },
+    ] as { label: string; value: number }[]).filter(r => r.value > 0);
   })() : [];
 
-  // Other settlement items (TikTok-specific) — not included in total_fees
+  // Other settlement items (TikTok-specific) — informational, not included in total_fees
   const otherRows: { label: string; value: number }[] = data ? [
     ...(data.breakdown.shipping_fee > 0
       ? [{ label: 'Shipping', value: data.breakdown.shipping_fee }]

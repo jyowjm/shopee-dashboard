@@ -64,7 +64,10 @@ function aggregateFees(incomes: EscrowIncome[]): Pick<FeesData, 'net_payout' | '
     gross_revenue,
     total_fees,
     fee_rate,
-    breakdown: { commission_fee, service_fee, transaction_fee, shipping_fee: 0, adjustment: 0 },
+    breakdown: {
+      commission_fee, service_fee, transaction_fee,
+      affiliate_fee: 0, tax_amount: 0, shipping_fee: 0, adjustment: 0,
+    },
   };
 }
 
