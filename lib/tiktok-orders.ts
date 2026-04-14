@@ -155,7 +155,7 @@ export function tikTokOrdersToRows(
       item_id:                   parseInt(item.product_id, 10) || null,
       item_name:                 item.product_name ?? null,
       item_sku:                  item.seller_sku ?? null,
-      model_id:                  parseInt(item.sku_id, 10) || null,
+      model_id:                  parseInt(item.sku_id ?? '', 10) || null,
       model_name:                item.sku_name ?? null,
       model_sku:                 item.seller_sku ?? null,
       model_quantity_purchased:  item.quantity ?? 1,    // TikTok: each line_item = 1 unit (no quantity field)
