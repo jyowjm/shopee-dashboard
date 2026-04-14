@@ -46,9 +46,11 @@ export async function GET() {
     const stmtData = await callTikTok<unknown>(
       '/finance/202309/statements',
       {
-        create_time_ge: String(sevenDaysAgo),
-        create_time_lt: String(nowSec),
-        page_size:      '5',
+        statement_time_ge: String(sevenDaysAgo),
+        statement_time_lt: String(nowSec),
+        sort_field:        'statement_time',
+        sort_order:        'DESC',
+        page_size:         '5',
       }
     );
     financeDiagnostic = { statements_raw: stmtData };

@@ -181,8 +181,18 @@ export interface TikTokOrderStatement {
 
 /** One daily statement record from GET /finance/202309/statements */
 export interface TikTokStatement {
-  id: string;
-  [key: string]: unknown;
+  id:                   string;
+  statement_time:       number;  // Unix timestamp
+  settlement_amount:    string;  // net payout to seller (decimal string)
+  currency:             string;
+  revenue_amount:       string;  // item revenue (decimal string)
+  fee_amount:           string;  // platform fees (decimal string, may be negative)
+  adjustment_amount:    string;
+  payment_status:       string;  // e.g. "PAID", "PROCESSING", "FAILED"
+  payment_id:           string;
+  net_sales_amount:     string;
+  shipping_cost_amount: string;
+  payment_time:         number;  // Unix timestamp
 }
 
 /**

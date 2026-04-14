@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { subMonths } from 'date-fns';
 import { callTikTok } from '@/lib/tiktok';
-import type {
-  TikTokApiError,
-  TikTokStatement,
-  TikTokStatementTransaction,
-} from '@/types/tiktok';
+import type { TikTokApiError, TikTokStatement } from '@/types/tiktok';
 import type { FeesData } from '@/types/shopee';
 
 const MYT_OFFSET_MS = 8 * 60 * 60 * 1000;
@@ -24,6 +20,9 @@ function parseAmt(val: string | undefined | null): number {
 /**
  * Fetch all daily statement records for a date range.
  * Uses GET /finance/202309/statements — only settled orders appear here.
+ *
+ * Date params: statement_time_ge / statement_time_lt (Unix seconds).
+ * sort_field "statement_time" is required by the API.
  */
 async function fetchTikTokStatements(from: number, to: number): Promise<TikTokStatement[]> {
   const all: TikTokStatement[] = [];
@@ -31,9 +30,11 @@ async function fetchTikTokStatements(from: number, to: number): Promise<TikTokSt
 
   do {
     const query: Record<string, string> = {
-      create_time_ge: String(from),
-      create_time_lt: String(to),
-      page_size: '100',
+      statement_time_ge: String(from),
+      statement_time_lt: String(to),
+      sort_field:        'statement_time',
+      sort_order:        'DESC',
+      page_size:         '100',
       ...(pageToken ? { page_token: pageToken } : {}),
     };
 
@@ -50,48 +51,18 @@ async function fetchTikTokStatements(from: number, to: number): Promise<TikTokSt
 }
 
 /**
- * Fetch all order-level transactions for a single statement.
- * Uses GET /finance/202501/statements/{id}/statement_transactions
+ * Aggregate fee totals directly from statement-level records.
+ * Each statement already contains revenue_amount, fee_amount, settlement_amount.
  */
-async function fetchStatementTransactions(
-  statementId: string
-): Promise<TikTokStatementTransaction[]> {
-  const all: TikTokStatementTransaction[] = [];
-  let pageToken = '';
-
-  do {
-    const query: Record<string, string> = {
-      sort_field: 'order_create_time',
-      sort_order: 'DESC',
-      page_size: '100',
-      ...(pageToken ? { page_token: pageToken } : {}),
-    };
-
-    const data = await callTikTok<{
-      transactions?: TikTokStatementTransaction[];
-      next_page_token?: string;
-    }>(
-      `/finance/202501/statements/${statementId}/statement_transactions`,
-      query
-    );
-
-    all.push(...(data.transactions ?? []));
-    pageToken = data.next_page_token ?? '';
-  } while (pageToken);
-
-  return all;
-}
-
-function aggregateFees(transactions: TikTokStatementTransaction[]) {
+function aggregateFees(statements: TikTokStatement[]) {
   let net_payout    = 0;
   let gross_revenue = 0;
   let total_fees    = 0;
 
-  for (const t of transactions) {
-    gross_revenue += parseAmt(t.revenue_amount);
-    // fee_and_tax_amount is negative — take absolute value for "fees charged"
-    total_fees    += Math.abs(parseAmt(t.fee_and_tax_amount));
-    net_payout    += parseAmt(t.settlement_amount);
+  for (const s of statements) {
+    gross_revenue += parseAmt(s.revenue_amount);
+    total_fees    += Math.abs(parseAmt(s.fee_amount));
+    net_payout    += parseAmt(s.settlement_amount);
   }
 
   const fee_rate = gross_revenue > 0 ? (total_fees / gross_revenue) * 100 : 0;
@@ -120,21 +91,15 @@ export async function GET(req: NextRequest) {
       prevTo   = from;
     }
 
-    // Fetch statements for both periods in parallel
-    // Statements only contain settled orders — no status filtering needed
+    // Fetch statements for both periods in parallel.
+    // Statements only contain settled orders — no status-filtering needed.
     const [currentStatements, prevStatements] = await Promise.all([
       fetchTikTokStatements(from, to),
       fetchTikTokStatements(prevFrom, prevTo),
     ]);
 
-    // Fetch all transactions for each statement in parallel
-    const [currentTxns, prevTxns] = await Promise.all([
-      Promise.all(currentStatements.map(s => fetchStatementTransactions(s.id))),
-      Promise.all(prevStatements.map(s => fetchStatementTransactions(s.id))),
-    ]);
-
-    const current = aggregateFees(currentTxns.flat());
-    const prev    = aggregateFees(prevTxns.flat());
+    const current = aggregateFees(currentStatements);
+    const prev    = aggregateFees(prevStatements);
 
     const result: FeesData = {
       net_payout:     current.net_payout,
@@ -142,7 +107,7 @@ export async function GET(req: NextRequest) {
       total_fees:     current.total_fees,
       fee_rate:       current.fee_rate,
       breakdown: {
-        commission_fee:  current.total_fees,   // fee_and_tax_amount covers commission + taxes
+        commission_fee:  current.total_fees,  // fee_amount covers all platform fees
         service_fee:     0,
         transaction_fee: 0,
       },
