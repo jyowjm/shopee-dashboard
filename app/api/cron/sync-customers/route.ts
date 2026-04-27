@@ -10,7 +10,11 @@ import {
   setSyncState,
 } from '@/lib/db-sync';
 import { loadTikTokTokens } from '@/lib/kv';
-import { fetchTikTokOrderList, fetchTikTokOrderDetails, tikTokOrdersToRows } from '@/lib/tiktok-orders';
+import {
+  fetchTikTokOrderList,
+  fetchTikTokOrderDetails,
+  tikTokOrdersToRows,
+} from '@/lib/tiktok-orders';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -21,10 +25,10 @@ const UPDATE_WINDOW = 30 * 24 * 60 * 60;
 async function fetchAllSns(
   from: number,
   to: number,
-  timeRangeField: 'create_time' | 'update_time'
+  timeRangeField: 'create_time' | 'update_time',
 ): Promise<string[]> {
   const { orders } = await fetchOrderSummaries(from, to, Infinity, timeRangeField);
-  return orders.map(o => o.order_sn);
+  return orders.map((o) => o.order_sn);
 }
 
 async function syncOrders(sns: string[]): Promise<void> {
@@ -33,15 +37,11 @@ async function syncOrders(sns: string[]): Promise<void> {
   const { orderRows, itemRows } = apiOrderToRows(details);
   await upsertOrderRows(orderRows, 'api');
   await replaceOrderItems(
-    details.map(d => d.order_sn),
-    itemRows
+    details.map((d) => d.order_sn),
+    itemRows,
   );
   const buyerIds = [
-    ...new Set(
-      details
-        .map(d => d.buyer_user_id)
-        .filter((id): id is number => !!id && id !== 0)
-    ),
+    ...new Set(details.map((d) => d.buyer_user_id).filter((id): id is number => !!id && id !== 0)),
   ];
   await upsertBuyers(buyerIds);
 }
@@ -85,14 +85,16 @@ export async function GET(req: NextRequest) {
       try {
         // 1. New TikTok orders: create_time watermark
         const ttLastCreateStr = await getSyncState('tiktok_last_create_sync');
-        const ttLastCreate    = ttLastCreateStr ? parseInt(ttLastCreateStr, 10) : now - 30 * 24 * 60 * 60;
+        const ttLastCreate = ttLastCreateStr
+          ? parseInt(ttLastCreateStr, 10)
+          : now - 30 * 24 * 60 * 60;
 
         const tikTokNewIds: string[] = [];
         let ttCur = ttLastCreate;
         while (ttCur < now) {
           const ttEnd = Math.min(ttCur + CHUNK_SECONDS, now);
           const { orders: ttList } = await fetchTikTokOrderList(ttCur, ttEnd, Infinity);
-          tikTokNewIds.push(...ttList.map(o => o.id));
+          tikTokNewIds.push(...ttList.map((o) => o.id));
           ttCur = ttEnd;
         }
 
@@ -100,19 +102,29 @@ export async function GET(req: NextRequest) {
           const details = await fetchTikTokOrderDetails([...new Set(tikTokNewIds)]);
           const { orderRows, itemRows } = tikTokOrdersToRows(details);
           await upsertOrderRows(orderRows, 'api');
-          await replaceOrderItems(details.map(d => d.id), itemRows);
+          await replaceOrderItems(
+            details.map((d) => d.id),
+            itemRows,
+          );
         }
 
         await setSyncState('tiktok_last_create_sync', String(now));
         tikTokNew = tikTokNewIds.length;
 
         // 2. Updated TikTok orders: rolling 30-day window
-        const { orders: ttUpdated } = await fetchTikTokOrderList(now - UPDATE_WINDOW, now, Infinity);
+        const { orders: ttUpdated } = await fetchTikTokOrderList(
+          now - UPDATE_WINDOW,
+          now,
+          Infinity,
+        );
         if (ttUpdated.length) {
-          const details = await fetchTikTokOrderDetails([...new Set(ttUpdated.map(o => o.id))]);
+          const details = await fetchTikTokOrderDetails([...new Set(ttUpdated.map((o) => o.id))]);
           const { orderRows, itemRows } = tikTokOrdersToRows(details);
           await upsertOrderRows(orderRows, 'api');
-          await replaceOrderItems(details.map(d => d.id), itemRows);
+          await replaceOrderItems(
+            details.map((d) => d.id),
+            itemRows,
+          );
         }
         await setSyncState('tiktok_last_update_sync', String(now));
         tikTokUpdated = ttUpdated.length;

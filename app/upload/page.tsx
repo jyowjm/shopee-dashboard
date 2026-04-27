@@ -5,7 +5,9 @@ import { useRef, useState } from 'react';
 export default function UploadPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
-  const [result, setResult] = useState<{ orders: number; items: number; files: number } | null>(null);
+  const [result, setResult] = useState<{ orders: number; items: number; files: number } | null>(
+    null,
+  );
   const [errorMsg, setErrorMsg] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
 
@@ -46,11 +48,14 @@ export default function UploadPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 max-w-lg w-full">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Upload Order Reports</h1>
         <p className="text-gray-500 mb-6 text-sm leading-relaxed">
-          Download your order reports from Shopee Seller Centre → Orders → Export, then upload them here. You can select multiple reports at once.
+          Download your order reports from Shopee Seller Centre → Orders → Export, then upload them
+          here. You can select multiple reports at once.
         </p>
 
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Order reports (.xlsx)</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Order reports (.xlsx)
+          </label>
           <input
             ref={inputRef}
             type="file"
@@ -76,7 +81,8 @@ export default function UploadPage() {
 
         {status === 'success' && result && (
           <p className="mt-4 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-            {result.files} report{result.files > 1 ? 's' : ''} uploaded — {result.orders} orders and {result.items} items imported successfully.
+            {result.files} report{result.files > 1 ? 's' : ''} uploaded — {result.orders} orders and{' '}
+            {result.items} items imported successfully.
           </p>
         )}
 
@@ -87,7 +93,8 @@ export default function UploadPage() {
         )}
 
         <p className="mt-6 text-xs text-gray-400 leading-relaxed">
-          Uploading enriches customer data (tracking, delivery dates, return status, item details). Buyer IDs are linked on the next daily sync.
+          Uploading enriches customer data (tracking, delivery dates, return status, item details).
+          Buyer IDs are linked on the next daily sync.
         </p>
       </div>
     </div>

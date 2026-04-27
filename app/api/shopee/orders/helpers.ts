@@ -1,4 +1,5 @@
-import type { ShopeeOrderSummary, OrdersData } from '@/types/shopee';
+import type { ShopeeOrderSummary } from '@/types/shopee';
+import type { OrdersData } from '@/types/dashboard';
 
 export function aggregateOrders(orders: ShopeeOrderSummary[]): OrdersData {
   const by_status: Record<string, number> = {};

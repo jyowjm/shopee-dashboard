@@ -1,94 +1,87 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { DateRange } from './TimeFilter';
-import type { ProductData } from '@/types/shopee';
+import type { ProductData, Platform } from '@/types/dashboard';
+import { SectionSkeleton, SectionError } from './_shared';
+import { useFetch } from './use-fetch';
+import { fetchJson } from '@/lib/api-fetch';
 
 interface Props {
   dateRange: DateRange;
   refreshKey: number;
-  platform: 'all' | 'shopee' | 'tiktok';
+  platform: Platform;
   hasShopee: boolean;
   hasTikTok: boolean;
   includeTikTokShipping?: boolean;
 }
 
-export default function ProductsSection({ dateRange, refreshKey, platform, hasShopee, hasTikTok, includeTikTokShipping }: Props) {
-  const [products, setProducts] = useState<ProductData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<'revenue' | 'units_sold'>('revenue');
-
-  async function load() {
-    setLoading(true);
-    setError(null);
-    try {
-      const from = Math.floor(dateRange.from.getTime() / 1000);
-      const to = Math.floor(dateRange.to.getTime() / 1000);
-      const qs = `from=${from}&to=${to}`;
-
-      const tiktokQs = `${qs}${includeTikTokShipping ? '&includeShipping=true' : ''}`;
-
-      if (platform === 'all' && hasShopee && hasTikTok) {
-        const [shopeeRes, tiktokRes] = await Promise.all([
-          fetch(`/api/shopee/products?${qs}`),
-          fetch(`/api/tiktok/products?${tiktokQs}`),
-        ]);
-        const [s, t] = await Promise.all([shopeeRes.json(), tiktokRes.json()]);
-        // Merge by item name (cross-platform products have different IDs)
-        const nameMap = new Map<string, ProductData>();
-        for (const p of [...(s.products ?? []), ...(t.products ?? [])]) {
-          const key = p.name.toLowerCase().trim();
-          const ex = nameMap.get(key);
-          if (ex) {
-            ex.units_sold += p.units_sold;
-            ex.revenue    += p.revenue;
-          } else {
-            nameMap.set(key, { ...p });
-          }
-        }
-        setProducts(Array.from(nameMap.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 10));
-      } else {
-        const url = platform === 'tiktok' ? `/api/tiktok/products?${tiktokQs}` : `/api/shopee/products?${qs}`;
-        const res = await fetch(url);
-        if (res.status === 401) { throw new Error('Session expired — please reconnect your shop.'); }
-        if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
-        const data = await res.json();
-        setProducts(data.products ?? []);
-      }
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
+function mergeByName(s: ProductData[], t: ProductData[]): ProductData[] {
+  // Cross-platform products have different IDs, so merge by lowercased name.
+  const nameMap = new Map<string, ProductData>();
+  for (const p of [...s, ...t]) {
+    const key = p.name.toLowerCase().trim();
+    const ex = nameMap.get(key);
+    if (ex) {
+      ex.units_sold += p.units_sold;
+      ex.revenue += p.revenue;
+    } else {
+      nameMap.set(key, { ...p });
     }
   }
+  return [...nameMap.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 10);
+}
 
-  useEffect(() => { load(); }, [dateRange, refreshKey, includeTikTokShipping]);
+export default function ProductsSection({
+  dateRange,
+  refreshKey,
+  platform,
+  hasShopee,
+  hasTikTok,
+  includeTikTokShipping,
+}: Props) {
+  const [sortBy, setSortBy] = useState<'revenue' | 'units_sold'>('revenue');
 
-  const sorted = [...products].sort((a, b) => b[sortBy] - a[sortBy]);
+  const {
+    data: products,
+    loading,
+    error,
+    retry,
+  } = useFetch<ProductData[]>(async () => {
+    const from = Math.floor(dateRange.from.getTime() / 1000);
+    const to = Math.floor(dateRange.to.getTime() / 1000);
+    const qs = `from=${from}&to=${to}`;
+    const tiktokQs = `${qs}${includeTikTokShipping ? '&includeShipping=true' : ''}`;
 
-  if (loading) return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
-      <div className="h-4 bg-gray-200 rounded w-28 mb-4" />
-      <div className="h-48 bg-gray-100 rounded" />
-    </div>
-  );
+    if (platform === 'all' && hasShopee && hasTikTok) {
+      const [s, t] = await Promise.all([
+        fetchJson<{ products?: ProductData[] }>(`/api/shopee/products?${qs}`),
+        fetchJson<{ products?: ProductData[] }>(`/api/tiktok/products?${tiktokQs}`),
+      ]);
+      return mergeByName(s.products ?? [], t.products ?? []);
+    }
+    const url =
+      platform === 'tiktok' ? `/api/tiktok/products?${tiktokQs}` : `/api/shopee/products?${qs}`;
+    const data = await fetchJson<{ products?: ProductData[] }>(url);
+    return data.products ?? [];
+  }, [dateRange, refreshKey, platform, hasShopee, hasTikTok, includeTikTokShipping]);
 
-  if (error) return (
-    <div className="bg-white rounded-xl border border-red-200 p-6">
-      <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">Top Products</h2>
-      <p className="text-sm text-red-600 mb-3">{error}</p>
-      <button onClick={load} className="text-sm text-orange-600 underline">Retry</button>
-    </div>
-  );
+  const sorted = [...(products ?? [])].sort((a, b) => b[sortBy] - a[sortBy]);
+
+  if (loading) return <SectionSkeleton titleWidth="w-28" />;
+  if (error) return <SectionError title="Top Products" message={error} onRetry={retry} />;
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Top Products</h2>
         <div className="flex gap-1">
-          {(['revenue', 'units_sold'] as const).map(key => (
-            <button key={key} onClick={() => setSortBy(key)} className={`text-xs px-2 py-1 rounded ${sortBy === key ? 'bg-orange-500 text-white' : 'text-gray-500 hover:bg-gray-100'}`}>
+          {(['revenue', 'units_sold'] as const).map((key) => (
+            <button
+              key={key}
+              onClick={() => setSortBy(key)}
+              className={`text-xs px-2 py-1 rounded ${sortBy === key ? 'bg-orange-500 text-white' : 'text-gray-500 hover:bg-gray-100'}`}
+            >
               {key === 'revenue' ? 'Revenue' : 'Units'}
             </button>
           ))}

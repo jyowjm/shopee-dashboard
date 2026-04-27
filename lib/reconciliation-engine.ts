@@ -1,22 +1,75 @@
-import type { PayoutOrderRow, ReconOrderResult } from '@/types/reconciliation'
-import type { FeeConfig } from '@/lib/fee-config'
+import type { PayoutOrderRow, ReconOrderResult } from '@/types/reconciliation';
+import type { FeeConfig } from '@/lib/fee-config';
 
 function round2(n: number): number {
-  return Math.round(n * 100) / 100
+  return Math.round(n * 100) / 100;
 }
 
-function getTransactionRate(
-  paymentMethod: string,
-  installment: string,
-  config: FeeConfig
-): number {
+/** Sum the five fee components for a list of recon results — pass either side via picker. */
+function sumFees(results: ReconOrderResult[], side: 'actual' | 'expected'): number {
+  return results.reduce(
+    (s, r) =>
+      s +
+      r[`commission_${side}`] +
+      r[`transaction_${side}`] +
+      r[`platform_support_${side}`] +
+      r[`cashback_${side}`] +
+      r[`ams_${side}`],
+    0,
+  );
+}
+
+/** Roll up totals + diff for a list of recon results, all rounded to 2dp. */
+export function summariseReconResults(results: ReconOrderResult[]): {
+  total_actual: number;
+  total_expected: number;
+  total_diff: number;
+} {
+  const total_actual = +sumFees(results, 'actual').toFixed(2);
+  const total_expected = +sumFees(results, 'expected').toFixed(2);
+  const total_diff = +(total_actual - total_expected).toFixed(2);
+  return { total_actual, total_expected, total_diff };
+}
+
+/** Map a recon result + period id to the payout_orders DB row shape. */
+export function reconResultToDbRow(r: ReconOrderResult, periodId: string) {
+  return {
+    period_id: periodId,
+    order_sn: r.order_sn,
+    payout_date: r.payout_date || null,
+    product_price: r.product_price,
+    payment_method: r.payment_method,
+    payment_installment: r.payment_installment,
+    is_campaign_day: r.is_campaign_day,
+    commission_actual: r.commission_actual,
+    transaction_actual: r.transaction_actual,
+    platform_support_actual: r.platform_support_actual,
+    cashback_actual: r.cashback_actual,
+    ams_actual: r.ams_actual,
+    commission_expected: r.commission_expected,
+    transaction_expected: r.transaction_expected,
+    platform_support_expected: r.platform_support_expected,
+    cashback_expected: r.cashback_expected,
+    ams_expected: r.ams_expected,
+    ams_rate_used: r.ams_rate_used,
+    commission_diff: r.commission_diff,
+    transaction_diff: r.transaction_diff,
+    platform_support_diff: r.platform_support_diff,
+    cashback_diff: r.cashback_diff,
+    ams_diff: r.ams_diff,
+    total_diff: r.total_diff,
+    has_discrepancy: r.has_discrepancy,
+  };
+}
+
+function getTransactionRate(paymentMethod: string, installment: string, config: FeeConfig): number {
   if (paymentMethod === 'SPayLater') {
-    const key = `SPayLater_${installment || '1x'}`
+    const key = `SPayLater_${installment || '1x'}`;
     if (key in config.transaction_fee_rates) {
-      return config.transaction_fee_rates[key]
+      return config.transaction_fee_rates[key];
     }
   }
-  return config.transaction_fee_rates['default'] ?? 0.035
+  return config.transaction_fee_rates['default'] ?? 0.035;
 }
 
 /**
@@ -31,68 +84,70 @@ function getTransactionRate(
  *                      Falls back to config.ams_commission_rate × base × 1.08 when absent.
  */
 export function reconcileOrders(
-  orders:     PayoutOrderRow[],
-  config:     FeeConfig,
-  amsAmounts: Map<string, number> = new Map()  // order_sn → expected RM amount from AMS API
+  orders: PayoutOrderRow[],
+  config: FeeConfig,
+  amsAmounts: Map<string, number> = new Map(), // order_sn → expected RM amount from AMS API
 ): ReconOrderResult[] {
   return orders.map((order) => {
     // Fee bases per Shopee fee documentation:
     // Commission + Cashback base = product_price − seller_voucher
     // Transaction fee base       = product_price − seller_voucher + shipping_fee_by_buyer
-    const commissionBase  = order.product_price - order.seller_voucher
-    const transactionBase = commissionBase + order.shipping_fee_by_buyer
-    const isCampaign = (config.campaign_days as readonly string[]).includes(order.payout_date)
-    const sst = 1 + config.sst_rate
+    const commissionBase = order.product_price - order.seller_voucher;
+    const transactionBase = commissionBase + order.shipping_fee_by_buyer;
+    const isCampaign = (config.campaign_days as readonly string[]).includes(order.payout_date);
+    const sst = 1 + config.sst_rate;
 
     // Commission
-    const commission_expected = round2(commissionBase * config.marketplace_commission_rate * sst)
+    const commission_expected = round2(commissionBase * config.marketplace_commission_rate * sst);
 
     // Transaction fee
-    const txRate = getTransactionRate(order.payment_method, order.payment_installment, config)
-    const transaction_expected = round2(transactionBase * txRate * sst)
+    const txRate = getTransactionRate(order.payment_method, order.payment_installment, config);
+    const transaction_expected = round2(transactionBase * txRate * sst);
 
     // Platform support (flat fee)
-    const platform_support_expected = config.platform_support_fee
+    const platform_support_expected = config.platform_support_fee;
 
     // Cashback programme fee
-    let cashback_expected = 0
+    let cashback_expected = 0;
     if (config.cashback_enrolled) {
-      const cbRate = isCampaign ? config.cashback_rate_campaign : config.cashback_rate_non_campaign
+      const cbRate = isCampaign ? config.cashback_rate_campaign : config.cashback_rate_non_campaign;
       cashback_expected = Math.min(
         round2(commissionBase * cbRate * sst),
-        config.cashback_cap_incl_sst
-      )
+        config.cashback_cap_incl_sst,
+      );
     }
 
     // AMS commission
-    let ams_expected  = 0
-    let ams_rate_used = 0
+    let ams_expected = 0;
+    let ams_rate_used = 0;
     if (order.ams_actual > 0) {
-      const apiAmount = amsAmounts.get(order.order_sn)
+      const apiAmount = amsAmounts.get(order.order_sn);
       if (apiAmount !== undefined) {
         // API-sourced: order_brand_commission is PRE-SST; apply SST here to get the actual fee
-        ams_expected  = round2(apiAmount * sst)
-        ams_rate_used = commissionBase > 0 ? round2(apiAmount / commissionBase) : 0
+        ams_expected = round2(apiAmount * sst);
+        ams_rate_used = commissionBase > 0 ? round2(apiAmount / commissionBase) : 0;
       } else {
         // Fallback: config rate × base × SST (fixes previous bug where SST was omitted)
-        ams_expected  = round2(commissionBase * config.ams_commission_rate * sst)
-        ams_rate_used = config.ams_commission_rate
+        ams_expected = round2(commissionBase * config.ams_commission_rate * sst);
+        ams_rate_used = config.ams_commission_rate;
       }
     }
 
     // Diffs (positive = actual > expected = overcharged)
-    const commission_diff         = round2(order.commission_actual         - commission_expected)
-    const transaction_diff        = round2(order.transaction_actual        - transaction_expected)
-    const platform_support_diff   = round2(order.platform_support_actual   - platform_support_expected)
-    const cashback_diff           = round2(order.cashback_actual           - cashback_expected)
-    const ams_diff                = round2(order.ams_actual                - ams_expected)
-    const total_diff              = round2(commission_diff + transaction_diff + platform_support_diff + cashback_diff + ams_diff)
+    const commission_diff = round2(order.commission_actual - commission_expected);
+    const transaction_diff = round2(order.transaction_actual - transaction_expected);
+    const platform_support_diff = round2(order.platform_support_actual - platform_support_expected);
+    const cashback_diff = round2(order.cashback_actual - cashback_expected);
+    const ams_diff = round2(order.ams_actual - ams_expected);
+    const total_diff = round2(
+      commission_diff + transaction_diff + platform_support_diff + cashback_diff + ams_diff,
+    );
 
-    const has_discrepancy = Math.abs(total_diff) > config.tolerance
+    const has_discrepancy = Math.abs(total_diff) > config.tolerance;
 
     return {
       ...order,
-      is_campaign_day:            isCampaign,
+      is_campaign_day: isCampaign,
       commission_expected,
       transaction_expected,
       platform_support_expected,
@@ -106,6 +161,6 @@ export function reconcileOrders(
       ams_diff,
       total_diff,
       has_discrepancy,
-    }
-  })
+    };
+  });
 }

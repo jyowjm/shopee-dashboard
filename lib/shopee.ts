@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { loadTokens, saveTokens } from '@/lib/kv';
-import type { ShopeeTokens, ShopeeApiError } from '@/types/shopee';
+import type { ShopeeTokens } from '@/types/shopee';
+import type { ApiError } from '@/types/dashboard';
 
 const SANDBOX_BASE = 'https://openplatform.sandbox.test-stable.shopee.sg';
 const PROD_BASE = 'https://partner.shopeemobile.com';
@@ -15,7 +16,7 @@ export function sign(
   apiPath: string,
   timestamp: number,
   accessToken: string = '',
-  shopId: number | string = ''
+  shopId: number | string = '',
 ): string {
   const base = `${partnerId}${apiPath}${timestamp}${accessToken}${shopId}`;
   return crypto.createHmac('sha256', partnerKey).update(base).digest('hex');
@@ -38,12 +39,12 @@ export async function refreshAccessToken(tokens: ShopeeTokens): Promise<ShopeeTo
         refresh_token: tokens.refresh_token,
         partner_id: partnerId,
       }),
-    }
+    },
   );
 
   const data = await res.json();
   if (data.error) {
-    const err: ShopeeApiError = { type: 'auth', message: `Token refresh failed: ${data.message}` };
+    const err: ApiError = { type: 'auth', message: `Token refresh failed: ${data.message}` };
     throw err;
   }
 
@@ -60,12 +61,12 @@ export async function refreshAccessToken(tokens: ShopeeTokens): Promise<ShopeeTo
 export async function callShopee<T>(
   apiPath: string,
   queryParams: Record<string, string | number>,
-  options?: { method?: 'GET' | 'POST'; body?: object }
+  options?: { method?: 'GET' | 'POST'; body?: object },
 ): Promise<T> {
   let tokens = await loadTokens();
 
   if (!tokens) {
-    const err: ShopeeApiError = { type: 'auth', message: 'No tokens found. Please reconnect your shop.' };
+    const err: ApiError = { type: 'auth', message: 'No tokens found. Please reconnect your shop.' };
     throw err;
   }
 
@@ -100,15 +101,18 @@ export async function callShopee<T>(
   const data = await res.json();
 
   if (data.error === 'error_auth') {
-    const err: ShopeeApiError = { type: 'auth', message: data.message };
+    const err: ApiError = { type: 'auth', message: data.message };
     throw err;
   }
   if (data.error === 'error_too_many_request') {
-    const err: ShopeeApiError = { type: 'rate_limit', message: 'Too many requests. Please try again in a moment.' };
+    const err: ApiError = {
+      type: 'rate_limit',
+      message: 'Too many requests. Please try again in a moment.',
+    };
     throw err;
   }
   if (data.error && data.error !== '') {
-    const err: ShopeeApiError = { type: 'api_error', message: `${data.error}: ${data.message}` };
+    const err: ApiError = { type: 'api_error', message: `${data.error}: ${data.message}` };
     throw err;
   }
 
@@ -117,7 +121,7 @@ export async function callShopee<T>(
 
 /** Like loadTokens but throws if no tokens are stored (shop not connected) */
 export async function loadTokensOrThrow(): Promise<ShopeeTokens> {
-  const tokens = await loadTokens()
-  if (!tokens) throw new Error('Shop not connected. Please authenticate first.')
-  return tokens
+  const tokens = await loadTokens();
+  if (!tokens) throw new Error('Shop not connected. Please authenticate first.');
+  return tokens;
 }

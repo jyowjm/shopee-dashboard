@@ -19,7 +19,10 @@ describe('sign()', () => {
     const timestamp = 1620000000;
     const result = sign(partnerId, partnerKey, apiPath, timestamp);
     const crypto = require('crypto');
-    const expected = crypto.createHmac('sha256', partnerKey).update(`${partnerId}${apiPath}${timestamp}`).digest('hex');
+    const expected = crypto
+      .createHmac('sha256', partnerKey)
+      .update(`${partnerId}${apiPath}${timestamp}`)
+      .digest('hex');
     expect(result).toBe(expected);
   });
 
@@ -32,14 +35,19 @@ describe('sign()', () => {
     const shopId = 9876543;
     const result = sign(partnerId, partnerKey, apiPath, timestamp, accessToken, shopId);
     const crypto = require('crypto');
-    const expected = crypto.createHmac('sha256', partnerKey).update(`${partnerId}${apiPath}${timestamp}${accessToken}${shopId}`).digest('hex');
+    const expected = crypto
+      .createHmac('sha256', partnerKey)
+      .update(`${partnerId}${apiPath}${timestamp}${accessToken}${shopId}`)
+      .digest('hex');
     expect(result).toBe(expected);
   });
 });
 
 describe('getBaseUrl()', () => {
   const original = process.env.SHOPEE_ENV;
-  afterEach(() => { process.env.SHOPEE_ENV = original; });
+  afterEach(() => {
+    process.env.SHOPEE_ENV = original;
+  });
   it('returns sandbox URL when SHOPEE_ENV is sandbox', () => {
     process.env.SHOPEE_ENV = 'sandbox';
     expect(getBaseUrl()).toBe('https://openplatform.sandbox.test-stable.shopee.sg');

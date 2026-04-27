@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { parseOrderReport } from '@/lib/report-parser';
 import { upsertOrderRows, replaceOrderItems } from '@/lib/db-sync';
-import type { DbOrderRow, DbItemRow } from '@/lib/db-sync';
+import type { DbOrderRow, DbItemRow } from '@/types/db';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No files uploaded' }, { status: 400 });
     }
 
-    const nonXlsx = files.find(f => !f.name.endsWith('.xlsx'));
+    const nonXlsx = files.find((f) => !f.name.endsWith('.xlsx'));
     if (nonXlsx) {
       return NextResponse.json({ error: `${nonXlsx.name} is not a .xlsx file` }, { status: 400 });
     }
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
           allOrders.push(order);
         }
       }
-      allItems.push(...items.filter(i => seenSns.has(i.order_sn)));
+      allItems.push(...items.filter((i) => seenSns.has(i.order_sn)));
     }
 
     if (!allOrders.length) {
@@ -41,9 +41,17 @@ export async function POST(req: NextRequest) {
     }
 
     await upsertOrderRows(allOrders, 'report');
-    await replaceOrderItems(allOrders.map(o => o.order_sn), allItems);
+    await replaceOrderItems(
+      allOrders.map((o) => o.order_sn),
+      allItems,
+    );
 
-    return NextResponse.json({ ok: true, orders: allOrders.length, items: allItems.length, files: files.length });
+    return NextResponse.json({
+      ok: true,
+      orders: allOrders.length,
+      items: allItems.length,
+      files: files.length,
+    });
   } catch (err) {
     console.error('upload/orders error:', err);
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

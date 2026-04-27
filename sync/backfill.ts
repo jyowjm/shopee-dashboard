@@ -14,13 +14,13 @@ import {
   setSyncState,
 } from '../lib/db-sync';
 
-const BACKFILL_START = Math.floor(new Date('2026-01-01T00:00:00Z').getTime() / 1000);
+const BACKFILL_START = Math.floor(new Date('2020-01-01T00:00:00Z').getTime() / 1000);
 const CHUNK_SECONDS = 15 * 24 * 60 * 60;
 const SLEEP_MS = 200;
 const RATE_LIMIT_SLEEP_MS = 2000;
 
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function syncChunk(from: number, to: number, attempt = 1): Promise<void> {
@@ -47,7 +47,7 @@ async function syncChunk(from: number, to: number, attempt = 1): Promise<void> {
 
   let details;
   try {
-    details = await fetchOrderDetails(summaries.map(s => s.order_sn));
+    details = await fetchOrderDetails(summaries.map((s) => s.order_sn));
   } catch (err: unknown) {
     const e = err as { type?: string; message?: string };
     if (e.type === 'rate_limit' && attempt <= 1) {
@@ -64,15 +64,11 @@ async function syncChunk(from: number, to: number, attempt = 1): Promise<void> {
   const { orderRows, itemRows } = apiOrderToRows(details);
   await upsertOrderRows(orderRows, 'api');
 
-  const sns = details.map(d => d.order_sn);
+  const sns = details.map((d) => d.order_sn);
   await replaceOrderItems(sns, itemRows);
 
   const buyerIds = [
-    ...new Set(
-      details
-        .map(d => d.buyer_user_id)
-        .filter((id): id is number => !!id && id !== 0)
-    ),
+    ...new Set(details.map((d) => d.buyer_user_id).filter((id): id is number => !!id && id !== 0)),
   ];
   await upsertBuyers(buyerIds);
 
@@ -90,7 +86,9 @@ async function main() {
   const cursor = cursorStr ? parseInt(cursorStr, 10) : BACKFILL_START;
   const now = Math.floor(Date.now() / 1000);
 
-  console.log(`Starting backfill from ${new Date(cursor * 1000).toISOString()} to now (${new Date(now * 1000).toISOString()})`);
+  console.log(
+    `Starting backfill from ${new Date(cursor * 1000).toISOString()} to now (${new Date(now * 1000).toISOString()})`,
+  );
 
   let current = cursor;
   while (current < now) {
@@ -106,7 +104,7 @@ async function main() {
   console.log('Backfill complete!');
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error('Fatal:', err);
   process.exit(1);
 });

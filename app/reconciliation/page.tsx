@@ -1,96 +1,110 @@
-'use client'
+'use client';
 
-import { useState, useEffect, useCallback } from 'react'
-import ReconciliationSummary from '@/components/ReconciliationSummary'
-import ReconciliationTable from '@/components/ReconciliationTable'
-import type { PayoutPeriod, PayoutOrder } from '@/types/reconciliation'
+import { useState, useEffect, useCallback } from 'react';
+import ReconciliationSummary from '@/components/ReconciliationSummary';
+import ReconciliationTable from '@/components/ReconciliationTable';
+import { summariseReconResults } from '@/lib/reconciliation-engine';
+import type { PayoutPeriod, PayoutOrder } from '@/types/reconciliation';
 
 export default function ReconciliationPage() {
-  const [periods, setPeriods] = useState<PayoutPeriod[]>([])
-  const [activePeriodId, setActivePeriodId] = useState<string | null>(null)
-  const [orders, setOrders] = useState<PayoutOrder[]>([])
-  const [loading, setLoading] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const [fetching, setFetching] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [fetchFrom, setFetchFrom] = useState('')
-  const [fetchTo, setFetchTo] = useState('')
+  const [periods, setPeriods] = useState<PayoutPeriod[]>([]);
+  const [activePeriodId, setActivePeriodId] = useState<string | null>(null);
+  const [orders, setOrders] = useState<PayoutOrder[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fetchFrom, setFetchFrom] = useState('');
+  const [fetchTo, setFetchTo] = useState('');
 
-  const activePeriod = periods.find((p) => p.id === activePeriodId) ?? null
+  const activePeriod = periods.find((p) => p.id === activePeriodId) ?? null;
 
   useEffect(() => {
     fetch('/api/reconciliation/periods')
       .then((r) => r.json())
       .then((data) => {
-        setPeriods(data)
-        if (data.length > 0) setActivePeriodId(data[0].id)
-      })
-  }, [])
+        setPeriods(data);
+        if (data.length > 0) setActivePeriodId(data[0].id);
+      });
+  }, []);
 
   useEffect(() => {
-    if (!activePeriodId) return
-    setLoading(true)
+    if (!activePeriodId) return;
+    setLoading(true);
     fetch(`/api/reconciliation/orders?period_id=${activePeriodId}`)
       .then((r) => r.json())
-      .then((data) => { setOrders(data); setLoading(false) })
-      .catch(() => setLoading(false))
-  }, [activePeriodId])
+      .then((data) => {
+        setOrders(data);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [activePeriodId]);
 
   async function handleXlsxUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploading(true)
-    setError(null)
-    const form = new FormData()
-    form.append('file', file)
-    const res = await fetch('/api/reconciliation/upload', { method: 'POST', body: form })
-    const data = await res.json()
-    if (!res.ok) { setError(data.error); setUploading(false); return }
-    const periodsRes = await fetch('/api/reconciliation/periods')
-    const newPeriods = await periodsRes.json()
-    setPeriods(newPeriods)
-    setActivePeriodId(data.period_id)
-    setUploading(false)
-    e.target.value = ''
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch('/api/reconciliation/upload', { method: 'POST', body: form });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error);
+      setUploading(false);
+      return;
+    }
+    const periodsRes = await fetch('/api/reconciliation/periods');
+    const newPeriods = await periodsRes.json();
+    setPeriods(newPeriods);
+    setActivePeriodId(data.period_id);
+    setUploading(false);
+    e.target.value = '';
   }
 
   async function handleApiFetch() {
-    if (!fetchFrom || !fetchTo) { setError('Please enter both from and to dates'); return }
-    setFetching(true)
-    setError(null)
+    if (!fetchFrom || !fetchTo) {
+      setError('Please enter both from and to dates');
+      return;
+    }
+    setFetching(true);
+    setError(null);
     const res = await fetch('/api/reconciliation/fetch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ from_date: fetchFrom, to_date: fetchTo }),
-    })
-    const data = await res.json()
-    if (!res.ok) { setError(data.error); setFetching(false); return }
-    const periodsRes = await fetch('/api/reconciliation/periods')
-    const newPeriods = await periodsRes.json()
-    setPeriods(newPeriods)
-    setActivePeriodId(data.period_id)
-    setFetching(false)
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error);
+      setFetching(false);
+      return;
+    }
+    const periodsRes = await fetch('/api/reconciliation/periods');
+    const newPeriods = await periodsRes.json();
+    setPeriods(newPeriods);
+    setActivePeriodId(data.period_id);
+    setFetching(false);
   }
 
-  const handleStatusUpdate = useCallback(async (
-    orderSn: string,
-    status: PayoutOrder['status'],
-    notes: string
-  ) => {
-    await fetch(`/api/reconciliation/notes/${orderSn}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ period_id: activePeriodId, status, notes }),
-    })
-    setOrders((prev) => prev.map((o) =>
-      o.order_sn === orderSn ? { ...o, status, notes } : o
-    ))
-  }, [activePeriodId])
+  const handleStatusUpdate = useCallback(
+    async (orderSn: string, status: PayoutOrder['status'], notes: string) => {
+      await fetch(`/api/reconciliation/notes/${orderSn}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ period_id: activePeriodId, status, notes }),
+      });
+      setOrders((prev) => prev.map((o) => (o.order_sn === orderSn ? { ...o, status, notes } : o)));
+    },
+    [activePeriodId],
+  );
 
-  const totalExpected = orders.reduce((s, o) => s + o.commission_expected + o.transaction_expected + o.platform_support_expected + o.cashback_expected + o.ams_expected, 0)
-  const totalActual   = orders.reduce((s, o) => s + o.commission_actual + o.transaction_actual + o.platform_support_actual + o.cashback_actual + o.ams_actual, 0)
-  const totalDiff     = totalActual - totalExpected
-  const discrepancies = orders.filter((o) => o.has_discrepancy).length
+  const {
+    total_expected: totalExpected,
+    total_actual: totalActual,
+    total_diff: totalDiff,
+  } = summariseReconResults(orders);
+  const discrepancies = orders.filter((o) => o.has_discrepancy).length;
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -116,17 +130,36 @@ export default function ReconciliationPage() {
           <label className="text-sm font-medium text-gray-700">Upload Payout Report:</label>
           <label className="cursor-pointer rounded bg-orange-500 px-3 py-1.5 text-sm text-white hover:bg-orange-600">
             {uploading ? 'Uploading…' : 'Choose XLSX'}
-            <input type="file" accept=".xlsx" className="hidden" onChange={handleXlsxUpload} disabled={uploading} />
+            <input
+              type="file"
+              accept=".xlsx"
+              className="hidden"
+              onChange={handleXlsxUpload}
+              disabled={uploading}
+            />
           </label>
         </div>
         <div className="w-px bg-gray-200 self-stretch" />
         <div className="flex items-center gap-2 flex-wrap">
           <label className="text-sm font-medium text-gray-700">Fetch from API:</label>
-          <input type="date" value={fetchFrom} onChange={(e) => setFetchFrom(e.target.value)} className="text-sm border rounded px-2 py-1" />
+          <input
+            type="date"
+            value={fetchFrom}
+            onChange={(e) => setFetchFrom(e.target.value)}
+            className="text-sm border rounded px-2 py-1"
+          />
           <span className="text-gray-400">→</span>
-          <input type="date" value={fetchTo} onChange={(e) => setFetchTo(e.target.value)} className="text-sm border rounded px-2 py-1" />
-          <button onClick={handleApiFetch} disabled={fetching}
-            className="rounded bg-gray-800 px-3 py-1.5 text-sm text-white hover:bg-gray-700 disabled:opacity-50">
+          <input
+            type="date"
+            value={fetchTo}
+            onChange={(e) => setFetchTo(e.target.value)}
+            className="text-sm border rounded px-2 py-1"
+          />
+          <button
+            onClick={handleApiFetch}
+            disabled={fetching}
+            className="rounded bg-gray-800 px-3 py-1.5 text-sm text-white hover:bg-gray-700 disabled:opacity-50"
+          >
             {fetching ? 'Fetching…' : 'Fetch'}
           </button>
         </div>
@@ -140,7 +173,8 @@ export default function ReconciliationPage() {
 
       {activePeriod && (
         <p className="text-sm text-gray-500 mb-4">
-          {activePeriod.period_from} – {activePeriod.period_to} · {activePeriod.source.toUpperCase()} · {orders.length} orders
+          {activePeriod.period_from} – {activePeriod.period_to} ·{' '}
+          {activePeriod.source.toUpperCase()} · {orders.length} orders
         </p>
       )}
 
@@ -167,5 +201,5 @@ export default function ReconciliationPage() {
         </div>
       )}
     </div>
-  )
+  );
 }

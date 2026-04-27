@@ -1,6 +1,7 @@
 import { callShopee } from '@/lib/shopee';
 import { getSupabase } from '@/lib/supabase';
 import type { ShopeeOrderDetail } from '@/types/shopee';
+import type { DbOrderRow, DbItemRow } from '@/types/db';
 
 const BATCH_SIZE = 50;
 const UPSERT_CHUNK = 100;
@@ -27,67 +28,6 @@ export function isPaidOrder(status: string): boolean {
   return !['CANCELLED', 'IN_CANCEL', 'UNPAID'].includes(status);
 }
 
-// Common DB row shape for the orders table
-export interface DbOrderRow {
-  order_sn: string;
-  platform?: 'shopee' | 'tiktok';    // defaults to 'shopee' in DB if omitted
-  buyer_user_id?: number | null;
-  tiktok_buyer_uid?: string | null;   // TikTok-specific buyer identity
-  region?: string | null;
-  currency?: string | null;
-  cod?: boolean | null;
-  order_status: string;
-  message_to_seller?: string | null;
-  create_time: string; // ISO timestamp
-  update_time?: string | null;
-  days_to_ship?: number | null;
-  ship_by_date?: string | null;
-  buyer_username?: string | null;
-  total_amount?: number | null;
-  pay_time?: string | null;
-  payment_method?: string | null;
-  shipping_carrier?: string | null;
-  fulfillment_flag?: string | null;
-  cancel_reason?: string | null;
-  cancel_by?: string | null;
-  buyer_cancel_reason?: string | null;
-  estimated_shipping_fee?: number | null;
-  actual_shipping_fee?: number | null;
-  actual_shipping_fee_confirmed?: boolean | null;
-  recipient_name?: string | null;
-  recipient_phone?: string | null;
-  recipient_town?: string | null;
-  recipient_district?: string | null;
-  recipient_city?: string | null;
-  recipient_state?: string | null;
-  recipient_region?: string | null;
-  recipient_zipcode?: string | null;
-  tracking_number?: string | null;
-  ship_time?: string | null;
-  order_complete_time?: string | null;
-  return_refund_status?: string | null;
-  shipment_method?: string | null;
-}
-
-// Common DB row shape for the order_items table
-export interface DbItemRow {
-  order_sn: string;
-  item_id?: number | null;
-  item_name?: string | null;
-  item_sku?: string | null;
-  model_id?: number | null;
-  model_name?: string | null;
-  model_sku?: string | null;
-  model_quantity_purchased?: number | null;
-  model_original_price?: number | null;
-  model_discounted_price?: number | null;
-  promotion_type?: string | null;
-  image_url?: string | null;
-  returned_quantity?: number | null;
-  total_buyer_payment?: number | null;
-  voucher_code?: string | null;
-}
-
 function toTs(unix: number | undefined | null): string | null {
   if (!unix) return null;
   return new Date(unix * 1000).toISOString();
@@ -101,14 +41,21 @@ function unmasked(val: string | undefined | null): string | null {
 }
 
 const ADDRESS_FIELDS = [
-  'recipient_name', 'recipient_phone', 'recipient_town', 'recipient_district',
-  'recipient_city', 'recipient_state', 'recipient_region', 'recipient_zipcode',
+  'recipient_name',
+  'recipient_phone',
+  'recipient_town',
+  'recipient_district',
+  'recipient_city',
+  'recipient_state',
+  'recipient_region',
+  'recipient_zipcode',
 ] as const;
 
-export function apiOrderToRows(
-  orders: ShopeeOrderDetail[]
-): { orderRows: DbOrderRow[]; itemRows: DbItemRow[] } {
-  const orderRows: DbOrderRow[] = orders.map(o => ({
+export function apiOrderToRows(orders: ShopeeOrderDetail[]): {
+  orderRows: DbOrderRow[];
+  itemRows: DbItemRow[];
+} {
+  const orderRows: DbOrderRow[] = orders.map((o) => ({
     order_sn: o.order_sn,
     buyer_user_id: o.buyer_user_id && o.buyer_user_id !== 0 ? o.buyer_user_id : null,
     region: o.region ?? null,
@@ -142,8 +89,8 @@ export function apiOrderToRows(
     recipient_zipcode: unmasked(o.recipient_address?.zipcode),
   }));
 
-  const itemRows: DbItemRow[] = orders.flatMap(o =>
-    (o.item_list ?? []).map(item => ({
+  const itemRows: DbItemRow[] = orders.flatMap((o) =>
+    (o.item_list ?? []).map((item) => ({
       order_sn: o.order_sn,
       item_id: item.item_id ?? null,
       item_name: item.item_name ?? null,
@@ -156,7 +103,7 @@ export function apiOrderToRows(
       model_discounted_price: item.model_discounted_price ?? null,
       promotion_type: item.promotion_type ?? null,
       image_url: item.image_info?.image_url ?? null,
-    }))
+    })),
   );
 
   return { orderRows, itemRows };
@@ -168,21 +115,24 @@ export async function fetchOrderDetails(sns: string[]): Promise<ShopeeOrderDetai
     batches.push(sns.slice(i, i + BATCH_SIZE));
   }
   const results = await Promise.allSettled(
-    batches.map(batch =>
+    batches.map((batch) =>
       callShopee<{ order_list: ShopeeOrderDetail[] }>('/api/v2/order/get_order_detail', {
         order_sn_list: batch.join(','),
         response_optional_fields: FULL_OPTIONAL_FIELDS,
-      })
-    )
+      }),
+    ),
   );
   return results
-    .filter((r): r is PromiseFulfilledResult<{ order_list: ShopeeOrderDetail[] }> => r.status === 'fulfilled')
-    .flatMap(r => r.value.order_list ?? []);
+    .filter(
+      (r): r is PromiseFulfilledResult<{ order_list: ShopeeOrderDetail[] }> =>
+        r.status === 'fulfilled',
+    )
+    .flatMap((r) => r.value.order_list ?? []);
 }
 
 async function _upsertOrderRows(rows: DbOrderRow[], source: 'api' | 'report'): Promise<void> {
   const supabase = getSupabase();
-  const enriched = rows.map(r => ({
+  const enriched = rows.map((r) => ({
     ...r,
     is_paid_order: isPaidOrder(r.order_status),
     data_source: source,
@@ -191,34 +141,35 @@ async function _upsertOrderRows(rows: DbOrderRow[], source: 'api' | 'report'): P
 
   // Ensure buyer records exist before inserting orders (FK constraint).
   // Creates placeholder rows; upsertBuyers() fills in aggregates later.
-  const buyerIds = [...new Set(
-    enriched.map(r => r.buyer_user_id).filter((id): id is number => !!id && id !== 0)
-  )];
+  const buyerIds = [
+    ...new Set(enriched.map((r) => r.buyer_user_id).filter((id): id is number => !!id && id !== 0)),
+  ];
   if (buyerIds.length) {
-    const { error: bErr } = await supabase
-      .from('buyers')
-      .upsert(buyerIds.map(id => ({ buyer_user_id: id })), { onConflict: 'buyer_user_id', ignoreDuplicates: true });
+    const { error: bErr } = await supabase.from('buyers').upsert(
+      buyerIds.map((id) => ({ buyer_user_id: id })),
+      { onConflict: 'buyer_user_id', ignoreDuplicates: true },
+    );
     if (bErr) throw new Error(`upsertOrders (buyer placeholders): ${bErr.message}`);
   }
 
   for (let i = 0; i < enriched.length; i += UPSERT_CHUNK) {
     let chunk = enriched.slice(i, i + UPSERT_CHUNK);
-    const chunkSns = chunk.map(r => r.order_sn);
+    const chunkSns = chunk.map((r) => r.order_sn);
 
     // Preserve fields that each source cannot provide:
     // - API source: keep address fields populated by report uploads (API masks them)
     // - Report source: keep buyer_user_id set by API sync (reports don't have it)
-    const preserveFields: string[] = source === 'api'
-      ? [...ADDRESS_FIELDS]
-      : ['buyer_user_id'];
+    const preserveFields: string[] = source === 'api' ? [...ADDRESS_FIELDS] : ['buyer_user_id'];
 
     const { data: existing } = await supabase
       .from('orders')
       .select(`order_sn, ${preserveFields.join(', ')}`)
       .in('order_sn', chunkSns);
     if (existing?.length) {
-      const existingMap = new Map((existing as unknown as Record<string, unknown>[]).map(r => [r.order_sn as string, r]));
-      chunk = chunk.map(row => {
+      const existingMap = new Map(
+        (existing as unknown as Record<string, unknown>[]).map((r) => [r.order_sn as string, r]),
+      );
+      chunk = chunk.map((row) => {
         const ex = existingMap.get(row.order_sn);
         if (!ex) return row;
         const merged = { ...row };
@@ -246,25 +197,11 @@ async function _upsertOrderRows(rows: DbOrderRow[], source: 'api' | 'report'): P
   }
 }
 
-export async function upsertOrders(
-  orders: ShopeeOrderDetail[],
-  source: 'api' | 'report' = 'api'
-): Promise<void> {
-  const { orderRows } = apiOrderToRows(orders);
-  await _upsertOrderRows(orderRows, source);
-}
-
-export async function upsertOrderRows(
-  rows: DbOrderRow[],
-  source: 'api' | 'report'
-): Promise<void> {
+export async function upsertOrderRows(rows: DbOrderRow[], source: 'api' | 'report'): Promise<void> {
   await _upsertOrderRows(rows, source);
 }
 
-export async function replaceOrderItems(
-  sns: string[],
-  items: DbItemRow[]
-): Promise<void> {
+export async function replaceOrderItems(sns: string[], items: DbItemRow[]): Promise<void> {
   const supabase = getSupabase();
   if (!sns.length) return;
 
@@ -286,7 +223,7 @@ export async function replaceOrderItems(
 }
 
 export async function upsertBuyers(buyerIds: number[]): Promise<void> {
-  const ids = buyerIds.filter(id => id && id !== 0);
+  const ids = buyerIds.filter((id) => id && id !== 0);
   if (!ids.length) return;
   const { error } = await getSupabase().rpc('upsert_buyers', { buyer_ids: ids });
   if (error) throw new Error(`upsertBuyers: ${error.message}`);

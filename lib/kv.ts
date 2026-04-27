@@ -2,9 +2,9 @@ import { Redis } from '@upstash/redis';
 import type { ShopeeTokens } from '@/types/shopee';
 import type { TikTokTokens } from '@/types/tiktok';
 
-const KV_KEY          = 'shopee_tokens';
-const AMS_KV_KEY      = 'shopee_ams_tokens';
-const TIKTOK_KV_KEY   = 'tiktok_tokens';
+const KV_KEY = 'shopee_tokens';
+const AMS_KV_KEY = 'shopee_ams_tokens';
+const TIKTOK_KV_KEY = 'tiktok_tokens';
 
 let _redis: Redis | null = null;
 function getRedis(): Redis {
@@ -41,4 +41,8 @@ export async function saveTikTokTokens(tokens: TikTokTokens): Promise<void> {
 
 export async function loadTikTokTokens(): Promise<TikTokTokens | null> {
   return await getRedis().get<TikTokTokens>(TIKTOK_KV_KEY);
+}
+
+export async function deleteTikTokTokens(): Promise<void> {
+  await getRedis().del(TIKTOK_KV_KEY);
 }

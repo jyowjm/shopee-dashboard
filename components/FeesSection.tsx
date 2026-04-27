@@ -1,187 +1,136 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { format, subMonths } from 'date-fns';
+import { useState } from 'react';
 import type { DateRange } from './TimeFilter';
-import type { FeesData } from '@/types/shopee';
-
-function getPrevPeriodLabel(dateRange: DateRange): string {
-  const { from, to, preset } = dateRange;
-  const currentYear = new Date().getFullYear();
-
-  let prevFrom: Date;
-  let prevTo: Date;
-
-  if (preset === 'this_month' || preset === 'last_month') {
-    prevFrom = subMonths(from, 1);
-    prevTo = subMonths(to, 1);
-  } else {
-    const duration = to.getTime() - from.getTime();
-    prevFrom = new Date(from.getTime() - duration);
-    prevTo = new Date(from.getTime() - 1);
-  }
-
-  const yearSuffix = (d: Date) => d.getFullYear() !== currentYear ? `, ${d.getFullYear()}` : '';
-  const prevToDisplay = new Date(prevTo.getTime() - 1);
-  const fromLabel = format(prevFrom, 'MMM d') + yearSuffix(prevFrom);
-  const toLabel = format(prevToDisplay, 'MMM d') + yearSuffix(prevToDisplay);
-
-  if (fromLabel === toLabel) return fromLabel;
-  if (format(prevFrom, 'MMM yyyy') === format(prevToDisplay, 'MMM yyyy')) {
-    return `${format(prevFrom, 'MMM d')}–${format(prevToDisplay, 'd')}${yearSuffix(prevFrom)}`;
-  }
-  return `${fromLabel} – ${toLabel}`;
-}
-
-function DeltaBadge({ current, previous, periodLabel }: { current: number; previous: number; periodLabel: string }) {
-  if (previous === 0) return null;
-  const pct = ((current - previous) / previous) * 100;
-  const up = pct >= 0;
-  return (
-    <div className="flex flex-col items-start gap-0.5">
-      <span className={`inline-flex items-center gap-0.5 text-xs font-semibold px-1.5 py-0.5 rounded-full ${up ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-        {up ? '▲' : '▼'} {Math.abs(pct).toFixed(1)}%
-      </span>
-      <span className="text-xs text-gray-400">vs {periodLabel}</span>
-    </div>
-  );
-}
+import type { FeesData, Platform } from '@/types/dashboard';
+import { getPrevPeriodLabel, DeltaBadge, SectionError } from './_shared';
+import { useFetch } from './use-fetch';
+import { fetchJson } from '@/lib/api-fetch';
 
 interface Props {
   dateRange: DateRange;
   refreshKey: number;
-  platform: 'all' | 'shopee' | 'tiktok';
+  platform: Platform;
   hasShopee: boolean;
   hasTikTok: boolean;
 }
 
 function mergeFees(a: FeesData, b: FeesData): FeesData {
-  const net_payout    = a.net_payout    + b.net_payout;
+  const net_payout = a.net_payout + b.net_payout;
   const gross_revenue = a.gross_revenue + b.gross_revenue;
-  const total_fees    = a.total_fees    + b.total_fees;
+  const total_fees = a.total_fees + b.total_fees;
   return {
     net_payout,
     gross_revenue,
     total_fees,
     fee_rate: gross_revenue > 0 ? (total_fees / gross_revenue) * 100 : 0,
     breakdown: {
-      commission_fee:  a.breakdown.commission_fee  + b.breakdown.commission_fee,
-      service_fee:     a.breakdown.service_fee     + b.breakdown.service_fee,
+      commission_fee: a.breakdown.commission_fee + b.breakdown.commission_fee,
+      service_fee: a.breakdown.service_fee + b.breakdown.service_fee,
       transaction_fee: a.breakdown.transaction_fee + b.breakdown.transaction_fee,
-      affiliate_fee:   a.breakdown.affiliate_fee   + b.breakdown.affiliate_fee,
-      tax_amount:      a.breakdown.tax_amount      + b.breakdown.tax_amount,
-      shipping_fee:    a.breakdown.shipping_fee    + b.breakdown.shipping_fee,
-      adjustment:      a.breakdown.adjustment      + b.breakdown.adjustment,
+      affiliate_fee: a.breakdown.affiliate_fee + b.breakdown.affiliate_fee,
+      tax_amount: a.breakdown.tax_amount + b.breakdown.tax_amount,
+      shipping_fee: a.breakdown.shipping_fee + b.breakdown.shipping_fee,
+      adjustment: a.breakdown.adjustment + b.breakdown.adjustment,
     },
-    capped:          a.capped || b.capped,
+    capped: a.capped || b.capped,
     prev_net_payout: a.prev_net_payout + b.prev_net_payout,
     prev_total_fees: a.prev_total_fees + b.prev_total_fees,
-    has_estimates:   (a.has_estimates   ?? false) || (b.has_estimates   ?? false),
-    unsettled_count: (a.unsettled_count ?? 0)     + (b.unsettled_count ?? 0),
+    has_estimates: (a.has_estimates ?? false) || (b.has_estimates ?? false),
+    unsettled_count: (a.unsettled_count ?? 0) + (b.unsettled_count ?? 0),
   };
 }
 
-export default function FeesSection({ dateRange, refreshKey, platform, hasShopee, hasTikTok }: Props) {
-  const [data, setData] = useState<FeesData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export default function FeesSection({
+  dateRange,
+  refreshKey,
+  platform,
+  hasShopee,
+  hasTikTok,
+}: Props) {
   const [showBreakdown, setShowBreakdown] = useState(false);
 
-  async function load() {
-    setLoading(true);
-    setError(null);
-    try {
-      const from = Math.floor(dateRange.from.getTime() / 1000);
-      const to = Math.floor(dateRange.to.getTime() / 1000);
-      const presetParam = dateRange.preset ? `&preset=${dateRange.preset}` : '';
-      const qs = `from=${from}&to=${to}${presetParam}`;
+  const { data, loading, error, retry } = useFetch<FeesData>(async () => {
+    const from = Math.floor(dateRange.from.getTime() / 1000);
+    const to = Math.floor(dateRange.to.getTime() / 1000);
+    const presetParam = dateRange.preset ? `&preset=${dateRange.preset}` : '';
+    const qs = `from=${from}&to=${to}${presetParam}`;
 
-      if (platform === 'all' && hasShopee && hasTikTok) {
-        const [shopeeRes, tiktokRes] = await Promise.all([
-          fetch(`/api/shopee/fees?${qs}`),
-          fetch(`/api/tiktok/fees?${qs}`),
-        ]);
-        if (shopeeRes.status === 401 || tiktokRes.status === 401) { throw new Error('Session expired — please reconnect your shop.'); }
-        const [shopeeData, tiktokData]: [FeesData, FeesData] = await Promise.all([
-          shopeeRes.json(),
-          tiktokRes.json(),
-        ]);
-        setData(mergeFees(shopeeData, tiktokData));
-      } else {
-        const url = platform === 'tiktok' ? `/api/tiktok/fees?${qs}` : `/api/shopee/fees?${qs}`;
-        const res = await fetch(url);
-        if (res.status === 401) { throw new Error('Session expired — please reconnect your shop.'); }
-        if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
-        setData(await res.json());
-      }
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
+    if (platform === 'all' && hasShopee && hasTikTok) {
+      const [s, t] = await Promise.all([
+        fetchJson<FeesData>(`/api/shopee/fees?${qs}`),
+        fetchJson<FeesData>(`/api/tiktok/fees?${qs}`),
+      ]);
+      return mergeFees(s, t);
     }
-  }
+    const url = platform === 'tiktok' ? `/api/tiktok/fees?${qs}` : `/api/shopee/fees?${qs}`;
+    return fetchJson<FeesData>(url);
+  }, [dateRange, refreshKey, platform, hasShopee, hasTikTok]);
 
-  useEffect(() => { load(); }, [dateRange, refreshKey]);
-
-  if (loading) return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
-      <div className="h-4 bg-gray-200 rounded w-16 mb-4" />
-      <div className="grid grid-cols-3 gap-4">
-        {[0, 1, 2].map(i => <div key={i} className="h-20 bg-gray-100 rounded" />)}
+  if (loading)
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
+        <div className="h-4 bg-gray-200 rounded w-16 mb-4" />
+        <div className="grid grid-cols-3 gap-4">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-20 bg-gray-100 rounded" />
+          ))}
+        </div>
       </div>
-    </div>
-  );
+    );
 
-  if (error) return (
-    <div className="bg-white rounded-xl border border-red-200 p-6">
-      <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">Fees</h2>
-      <p className="text-sm text-red-600 mb-3">{error}</p>
-      <button onClick={load} className="text-sm text-orange-600 underline">Retry</button>
-    </div>
-  );
+  if (error) return <SectionError title="Fees" message={error} onRetry={retry} />;
 
   const periodLabel = getPrevPeriodLabel(dateRange);
   const rm = (n: number) => `RM ${n.toFixed(2)}`;
 
   // Fee rows — these sum to total_fees
-  const feeRows: { label: string; value: number }[] = data ? (() => {
-    if (platform === 'tiktok') {
-      return ([
-        { label: 'Referral Fee',         value: data.breakdown.commission_fee },
-        { label: 'Transaction Fee',      value: data.breakdown.transaction_fee },
-        { label: 'Affiliate Commission', value: data.breakdown.affiliate_fee },
-        { label: 'Service Fees',         value: data.breakdown.service_fee },
-        { label: 'Tax (SST / VAT)',      value: data.breakdown.tax_amount },
-      ] as { label: string; value: number }[]).filter(r => r.value > 0);
-    }
-    if (platform === 'shopee') {
-      return [
-        { label: 'Commission Fee',            value: data.breakdown.commission_fee },
-        ...(data.breakdown.service_fee > 0
-          ? [{ label: 'Service Fee',          value: data.breakdown.service_fee }]
-          : []),
-        { label: 'Transaction / Payment Fee', value: data.breakdown.transaction_fee },
-      ];
-    }
-    // all platforms
-    return ([
-      { label: 'Commission / Referral Fee',   value: data.breakdown.commission_fee },
-      { label: 'Transaction Fee',             value: data.breakdown.transaction_fee },
-      { label: 'Service Fees',                value: data.breakdown.service_fee },
-      { label: 'Affiliate Commission',        value: data.breakdown.affiliate_fee },
-      { label: 'Tax (SST / VAT)',             value: data.breakdown.tax_amount },
-    ] as { label: string; value: number }[]).filter(r => r.value > 0);
-  })() : [];
+  const feeRows: { label: string; value: number }[] = data
+    ? (() => {
+        if (platform === 'tiktok') {
+          return (
+            [
+              { label: 'Referral Fee', value: data.breakdown.commission_fee },
+              { label: 'Transaction Fee', value: data.breakdown.transaction_fee },
+              { label: 'Affiliate Commission', value: data.breakdown.affiliate_fee },
+              { label: 'Service Fees', value: data.breakdown.service_fee },
+              { label: 'Tax (SST / VAT)', value: data.breakdown.tax_amount },
+            ] as { label: string; value: number }[]
+          ).filter((r) => r.value > 0);
+        }
+        if (platform === 'shopee') {
+          return [
+            { label: 'Commission Fee', value: data.breakdown.commission_fee },
+            ...(data.breakdown.service_fee > 0
+              ? [{ label: 'Service Fee', value: data.breakdown.service_fee }]
+              : []),
+            { label: 'Transaction / Payment Fee', value: data.breakdown.transaction_fee },
+          ];
+        }
+        // all platforms
+        return (
+          [
+            { label: 'Commission / Referral Fee', value: data.breakdown.commission_fee },
+            { label: 'Transaction Fee', value: data.breakdown.transaction_fee },
+            { label: 'Service Fees', value: data.breakdown.service_fee },
+            { label: 'Affiliate Commission', value: data.breakdown.affiliate_fee },
+            { label: 'Tax (SST / VAT)', value: data.breakdown.tax_amount },
+          ] as { label: string; value: number }[]
+        ).filter((r) => r.value > 0);
+      })()
+    : [];
 
   // Other settlement items (TikTok-specific) — informational, not included in total_fees
-  const otherRows: { label: string; value: number }[] = data ? [
-    ...(data.breakdown.shipping_fee > 0
-      ? [{ label: 'Shipping', value: data.breakdown.shipping_fee }]
-      : []),
-    ...(data.breakdown.adjustment !== 0
-      ? [{ label: 'Adjustments', value: data.breakdown.adjustment }]
-      : []),
-  ] : [];
+  const otherRows: { label: string; value: number }[] = data
+    ? [
+        ...(data.breakdown.shipping_fee > 0
+          ? [{ label: 'Shipping', value: data.breakdown.shipping_fee }]
+          : []),
+        ...(data.breakdown.adjustment !== 0
+          ? [{ label: 'Adjustments', value: data.breakdown.adjustment }]
+          : []),
+      ]
+    : [];
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -195,7 +144,8 @@ export default function FeesSection({ dateRange, refreshKey, platform, hasShopee
 
       {data?.has_estimates && (
         <p className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded px-3 py-1.5 mb-4">
-          Includes estimated fees for {data.unsettled_count} unsettled order{data.unsettled_count !== 1 ? 's' : ''} — figures will update once orders settle.
+          Includes estimated fees for {data.unsettled_count} unsettled order
+          {data.unsettled_count !== 1 ? 's' : ''} — figures will update once orders settle.
         </p>
       )}
 
@@ -204,14 +154,26 @@ export default function FeesSection({ dateRange, refreshKey, platform, hasShopee
           <p className="text-xs text-gray-500 mb-1">Net Payout</p>
           <div className="flex items-start gap-2">
             <p className="text-2xl font-bold text-gray-900">{rm(data?.net_payout ?? 0)}</p>
-            {data && <DeltaBadge current={data.net_payout} previous={data.prev_net_payout} periodLabel={periodLabel} />}
+            {data && (
+              <DeltaBadge
+                current={data.net_payout}
+                previous={data.prev_net_payout}
+                periodLabel={periodLabel}
+              />
+            )}
           </div>
         </div>
         <div className="p-4 bg-gray-50 rounded-lg">
           <p className="text-xs text-gray-500 mb-1">Total Fees</p>
           <div className="flex items-start gap-2">
             <p className="text-2xl font-bold text-gray-900">{rm(data?.total_fees ?? 0)}</p>
-            {data && <DeltaBadge current={data.total_fees} previous={data.prev_total_fees} periodLabel={periodLabel} />}
+            {data && (
+              <DeltaBadge
+                current={data.total_fees}
+                previous={data.prev_total_fees}
+                periodLabel={periodLabel}
+              />
+            )}
           </div>
         </div>
         <div className="p-4 bg-gray-50 rounded-lg">
@@ -222,7 +184,7 @@ export default function FeesSection({ dateRange, refreshKey, platform, hasShopee
       </div>
 
       <button
-        onClick={() => setShowBreakdown(v => !v)}
+        onClick={() => setShowBreakdown((v) => !v)}
         className="text-xs font-medium text-orange-600 uppercase tracking-wide hover:text-orange-700"
       >
         {showBreakdown ? 'Hide breakdown ▲' : 'Show breakdown ▼'}
@@ -241,19 +203,26 @@ export default function FeesSection({ dateRange, refreshKey, platform, hasShopee
           <tfoot>
             <tr className="border-t-2 border-gray-200">
               <td className="pt-2 text-sm font-semibold text-gray-700">Total Fees</td>
-              <td className="pt-2 text-right font-bold text-gray-900">{rm(data?.total_fees ?? 0)}</td>
+              <td className="pt-2 text-right font-bold text-gray-900">
+                {rm(data?.total_fees ?? 0)}
+              </td>
             </tr>
             {otherRows.length > 0 && (
               <>
                 <tr>
-                  <td colSpan={2} className="pt-4 pb-1 text-xs font-medium text-gray-400 uppercase tracking-wide">
+                  <td
+                    colSpan={2}
+                    className="pt-4 pb-1 text-xs font-medium text-gray-400 uppercase tracking-wide"
+                  >
                     Other Settlement Items
                   </td>
                 </tr>
                 {otherRows.map(({ label, value }) => (
                   <tr key={label}>
                     <td className="py-1 text-gray-600">{label}</td>
-                    <td className={`py-1 text-right font-medium ${value < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                    <td
+                      className={`py-1 text-right font-medium ${value < 0 ? 'text-red-600' : 'text-gray-900'}`}
+                    >
                       {value < 0 ? `−${rm(Math.abs(value))}` : rm(value)}
                     </td>
                   </tr>

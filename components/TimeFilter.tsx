@@ -14,11 +14,37 @@ interface TimeFilterProps {
 
 const PRESETS = [
   { label: 'Today', getRange: () => ({ from: startOfDay(new Date()), to: endOfDay(new Date()) }) },
-  { label: 'Yesterday', getRange: () => ({ from: startOfDay(subDays(new Date(), 1)), to: endOfDay(subDays(new Date(), 1)) }) },
-  { label: 'Last 7 days', getRange: () => ({ from: startOfDay(subDays(new Date(), 6)), to: endOfDay(new Date()) }) },
-  { label: 'Last 30 days', getRange: () => ({ from: startOfDay(subDays(new Date(), 29)), to: endOfDay(new Date()) }) },
-  { label: 'Last month', getRange: () => ({ from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)), preset: 'last_month' }) },
-  { label: 'This month', getRange: () => ({ from: startOfMonth(new Date()), to: endOfDay(new Date()), preset: 'this_month' }) },
+  {
+    label: 'Yesterday',
+    getRange: () => ({
+      from: startOfDay(subDays(new Date(), 1)),
+      to: endOfDay(subDays(new Date(), 1)),
+    }),
+  },
+  {
+    label: 'Last 7 days',
+    getRange: () => ({ from: startOfDay(subDays(new Date(), 6)), to: endOfDay(new Date()) }),
+  },
+  {
+    label: 'Last 30 days',
+    getRange: () => ({ from: startOfDay(subDays(new Date(), 29)), to: endOfDay(new Date()) }),
+  },
+  {
+    label: 'Last month',
+    getRange: () => ({
+      from: startOfMonth(subMonths(new Date(), 1)),
+      to: endOfMonth(subMonths(new Date(), 1)),
+      preset: 'last_month',
+    }),
+  },
+  {
+    label: 'This month',
+    getRange: () => ({
+      from: startOfMonth(new Date()),
+      to: endOfDay(new Date()),
+      preset: 'this_month',
+    }),
+  },
 ];
 
 export default function TimeFilter({ onChange, disabled }: TimeFilterProps) {

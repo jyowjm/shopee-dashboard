@@ -1,4 +1,5 @@
-import type { ShopeeOrderDetail, ProductData } from '@/types/shopee';
+import type { ShopeeOrderDetail } from '@/types/shopee';
+import type { ProductData } from '@/types/dashboard';
 
 export function aggregateProducts(orders: ShopeeOrderDetail[]): ProductData[] {
   const map = new Map<number, ProductData>();

@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { format } from 'date-fns';
 import type { DateRange } from './TimeFilter';
-import type { AdsData } from '@/types/shopee';
+import type { AdsData } from '@/types/dashboard';
+import { useFetch } from './use-fetch';
+import { fetchJson } from '@/lib/api-fetch';
 
 interface Props {
   dateRange: DateRange;
@@ -15,35 +15,18 @@ function fmt(n: number) {
 }
 
 export default function AdsSection({ dateRange, refreshKey }: Props) {
-  const [data, setData] = useState<AdsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  async function load() {
-    setLoading(true);
-    setError(null);
-    try {
-      const start = format(dateRange.from, 'dd-MM-yyyy');
-      const end = format(dateRange.to, 'dd-MM-yyyy');
-      const res = await fetch(`/api/shopee/ads?start_date=${start}&end_date=${end}`);
-      if (res.status === 401) { throw new Error('Session expired — please reconnect your shop.'); }
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
-      setData(await res.json());
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => { load(); }, [dateRange, refreshKey]);
+  const { data, loading, error, retry } = useFetch<AdsData>(() => {
+    const from = Math.floor(dateRange.from.getTime() / 1000);
+    const to = Math.floor(dateRange.to.getTime() / 1000);
+    return fetchJson<AdsData>(`/api/shopee/ads?from=${from}&to=${to}`);
+  }, [dateRange, refreshKey]);
 
   if (loading) {
     return (
       <div className="bg-white rounded-xl shadow-sm p-6 animate-pulse">
         <div className="h-4 bg-gray-200 rounded w-24 mb-4" />
         <div className="grid grid-cols-3 gap-4">
-          {[0, 1, 2].map(i => (
+          {[0, 1, 2].map((i) => (
             <div key={i} className="h-16 bg-gray-100 rounded" />
           ))}
         </div>
@@ -54,9 +37,13 @@ export default function AdsSection({ dateRange, refreshKey }: Props) {
   if (error) {
     return (
       <div className="bg-white rounded-xl shadow-sm p-6">
-        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Ads Performance</h2>
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
+          Ads Performance
+        </h2>
         <p className="text-sm text-red-500">{error}</p>
-        <button onClick={load} className="mt-2 text-xs text-orange-500 underline">Retry</button>
+        <button onClick={retry} className="mt-2 text-xs text-orange-500 underline">
+          Retry
+        </button>
       </div>
     );
   }
@@ -65,7 +52,9 @@ export default function AdsSection({ dateRange, refreshKey }: Props) {
 
   return (
     <div className="bg-white rounded-xl shadow-sm p-6">
-      <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Ads Performance</h2>
+      <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">
+        Ads Performance
+      </h2>
 
       {noSpend ? (
         <p className="text-sm text-gray-400">No ad spend recorded for this period.</p>
@@ -84,7 +73,8 @@ export default function AdsSection({ dateRange, refreshKey }: Props) {
             <p className="text-xs text-gray-400 mb-1">ROAS</p>
             <p className="text-2xl font-bold text-orange-500">{data!.roas.toFixed(2)}x</p>
             <p className="text-xs text-gray-400 mt-0.5">
-              {data!.clicks.toLocaleString()} clicks · {data!.impressions.toLocaleString()} impressions
+              {data!.clicks.toLocaleString()} clicks · {data!.impressions.toLocaleString()}{' '}
+              impressions
             </p>
           </div>
         </div>

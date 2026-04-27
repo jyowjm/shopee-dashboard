@@ -3,6 +3,9 @@
 # Git worktrees
 .worktrees/
 
+# Superpowers tooling artifacts (brainstorm sessions, etc.)
+.superpowers/
+
 # dependencies
 /node_modules
 /.pnp

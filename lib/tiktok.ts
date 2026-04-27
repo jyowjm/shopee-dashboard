@@ -1,14 +1,11 @@
 import crypto from 'crypto';
 import { loadTikTokTokens, saveTikTokTokens } from '@/lib/kv';
-import type { TikTokTokens, TikTokApiError } from '@/types/tiktok';
+import type { TikTokTokens } from '@/types/tiktok';
+import type { ApiError } from '@/types/dashboard';
 
-const TIKTOK_BASE   = 'https://open-api.tiktokglobalshop.com';
+const TIKTOK_BASE = 'https://open-api.tiktokglobalshop.com';
 // Auth endpoints are on a separate domain and use GET with query params
-const REFRESH_URL   = 'https://auth.tiktok-shops.com/api/v2/token/refresh';
-
-export function getTikTokBaseUrl(): string {
-  return TIKTOK_BASE;
-}
+const REFRESH_URL = 'https://auth.tiktok-shops.com/api/v2/token/refresh';
 
 /**
  * TikTok Shop Open Platform request signing (v202309).
@@ -24,7 +21,7 @@ export function signTikTok(
   appSecret: string,
   path: string,
   params: Record<string, string>,
-  body = ''
+  body = '',
 ): string {
   const { sign: _s, access_token: _a, ...signingParams } = params;
   const paramStr = Object.entries(signingParams)
@@ -36,31 +33,31 @@ export function signTikTok(
 }
 
 export async function refreshTikTokAccessToken(tokens: TikTokTokens): Promise<TikTokTokens> {
-  const appKey    = process.env.TIKTOK_CLIENT_KEY!.trim();
+  const appKey = process.env.TIKTOK_CLIENT_KEY!.trim();
   const appSecret = process.env.TIKTOK_CLIENT_SECRET!.trim();
 
   // Refresh is also a GET request with query params
   const params = new URLSearchParams({
-    app_key:       appKey,
-    app_secret:    appSecret,
+    app_key: appKey,
+    app_secret: appSecret,
     refresh_token: tokens.refresh_token,
-    grant_type:    'refresh_token',
+    grant_type: 'refresh_token',
   });
 
-  const res  = await fetch(`${REFRESH_URL}?${params.toString()}`);
+  const res = await fetch(`${REFRESH_URL}?${params.toString()}`);
   const data = await res.json();
   if (data.code !== 0) {
-    const err: TikTokApiError = { type: 'auth', message: `TikTok token refresh failed: ${data.message}` };
+    const err: ApiError = { type: 'auth', message: `TikTok token refresh failed: ${data.message}` };
     throw err;
   }
 
   const d = data.data;
   const newTokens: TikTokTokens = {
-    access_token:  d.access_token,
+    access_token: d.access_token,
     refresh_token: d.refresh_token,
-    shop_id:       tokens.shop_id,
-    shop_cipher:   tokens.shop_cipher,
-    expires_at:    d.access_token_expire_in * 1000,  // absolute Unix timestamp → ms
+    shop_id: tokens.shop_id,
+    shop_cipher: tokens.shop_cipher,
+    expires_at: d.access_token_expire_in * 1000, // absolute Unix timestamp → ms
   };
   await saveTikTokTokens(newTokens);
   return newTokens;
@@ -73,11 +70,11 @@ export async function refreshTikTokAccessToken(tokens: TikTokTokens): Promise<Ti
  * Signing for this endpoint does NOT use shop_cipher (we don't have it yet).
  */
 export async function getAuthorizedShops(
-  accessToken: string
+  accessToken: string,
 ): Promise<Array<{ id: string; name: string; cipher: string }>> {
-  const appKey    = process.env.TIKTOK_CLIENT_KEY!.trim();
+  const appKey = process.env.TIKTOK_CLIENT_KEY!.trim();
   const appSecret = process.env.TIKTOK_CLIENT_SECRET!.trim();
-  const path      = '/authorization/202309/shops';
+  const path = '/authorization/202309/shops';
   const timestamp = String(Math.floor(Date.now() / 1000));
 
   const signingParams: Record<string, string> = { app_key: appKey, timestamp };
@@ -106,12 +103,15 @@ export async function getAuthorizedShops(
 export async function callTikTok<T>(
   path: string,
   query: Record<string, string> = {},
-  options?: { method?: 'GET' | 'POST'; body?: object }
+  options?: { method?: 'GET' | 'POST'; body?: object },
 ): Promise<T> {
   let tokens = await loadTikTokTokens();
 
   if (!tokens) {
-    const err: TikTokApiError = { type: 'auth', message: 'TikTok shop not connected. Please connect your TikTok Shop.' };
+    const err: ApiError = {
+      type: 'auth',
+      message: 'TikTok shop not connected. Please connect your TikTok Shop.',
+    };
     throw err;
   }
 
@@ -120,17 +120,17 @@ export async function callTikTok<T>(
     tokens = await refreshTikTokAccessToken(tokens);
   }
 
-  const appKey    = process.env.TIKTOK_CLIENT_KEY!.trim();
+  const appKey = process.env.TIKTOK_CLIENT_KEY!.trim();
   const appSecret = process.env.TIKTOK_CLIENT_SECRET!.trim();
   const timestamp = String(Math.floor(Date.now() / 1000));
 
-  const method    = options?.method ?? 'GET';
-  const bodyStr   = options?.body ? JSON.stringify(options.body) : '';
+  const method = options?.method ?? 'GET';
+  const bodyStr = options?.body ? JSON.stringify(options.body) : '';
 
   const signingParams: Record<string, string> = {
-    app_key:      appKey,
+    app_key: appKey,
     timestamp,
-    shop_cipher:  tokens.shop_cipher,
+    shop_cipher: tokens.shop_cipher,
     ...query,
   };
 
@@ -155,24 +155,23 @@ export async function callTikTok<T>(
   const data = await res.json();
 
   if (data.code === 109 || data.code === 105) {
-    const err: TikTokApiError = { type: 'auth', message: data.message ?? 'TikTok auth error' };
+    const err: ApiError = { type: 'auth', message: data.message ?? 'TikTok auth error' };
     throw err;
   }
   if (data.code === 130006) {
-    const err: TikTokApiError = { type: 'rate_limit', message: 'TikTok rate limit exceeded. Please try again shortly.' };
+    const err: ApiError = {
+      type: 'rate_limit',
+      message: 'TikTok rate limit exceeded. Please try again shortly.',
+    };
     throw err;
   }
   if (data.code !== 0) {
-    const err: TikTokApiError = { type: 'api_error', message: `TikTok API error ${data.code}: ${data.message}` };
+    const err: ApiError = {
+      type: 'api_error',
+      message: `TikTok API error ${data.code}: ${data.message}`,
+    };
     throw err;
   }
 
   return data.data as T;
-}
-
-/** Like loadTikTokTokens but throws if not connected */
-export async function loadTikTokTokensOrThrow(): Promise<TikTokTokens> {
-  const tokens = await loadTikTokTokens();
-  if (!tokens) throw new Error('TikTok shop not connected. Please authenticate first.');
-  return tokens;
 }

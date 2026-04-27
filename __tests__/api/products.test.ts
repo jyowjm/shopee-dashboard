@@ -26,13 +26,13 @@ const orders: ShopeeOrderDetail[] = [
 describe('aggregateProducts()', () => {
   it('sums units_sold across orders for the same item', () => {
     const result = aggregateProducts(orders);
-    const widget = result.find(p => p.item_id === 1);
+    const widget = result.find((p) => p.item_id === 1);
     expect(widget?.units_sold).toBe(3);
   });
 
   it('sums revenue for each item', () => {
     const result = aggregateProducts(orders);
-    const widget = result.find(p => p.item_id === 1);
+    const widget = result.find((p) => p.item_id === 1);
     expect(widget?.revenue).toBe(150); // 2*50 + 1*50
   });
 
@@ -47,7 +47,14 @@ describe('aggregateProducts()', () => {
       order_status: 'COMPLETED',
       total_amount: 10,
       create_time: 1700000000,
-      item_list: [{ item_id: i + 100, item_name: `Product ${i}`, model_quantity_purchased: 1, model_discounted_price: 10 }],
+      item_list: [
+        {
+          item_id: i + 100,
+          item_name: `Product ${i}`,
+          model_quantity_purchased: 1,
+          model_discounted_price: 10,
+        },
+      ],
     }));
     expect(aggregateProducts(manyOrders)).toHaveLength(10);
   });

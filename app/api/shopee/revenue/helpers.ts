@@ -1,18 +1,11 @@
-import { format } from 'date-fns';
-import type { ShopeeOrderDetail, RevenueData } from '@/types/shopee';
-
-// Shopee order timestamps are Unix seconds (UTC).
-// All date grouping is done in MYT (UTC+8) so daily buckets match Malaysian calendar days.
-const MYT_OFFSET_MS = 8 * 60 * 60 * 1000;
-
-function toMytDate(unixSeconds: number): string {
-  return format(new Date(unixSeconds * 1000 + MYT_OFFSET_MS), 'yyyy-MM-dd');
-}
+import { toMytDate } from '@/lib/datetime';
+import type { ShopeeOrderDetail } from '@/types/shopee';
+import type { RevenueData } from '@/types/dashboard';
 
 function itemRevenue(order: ShopeeOrderDetail): number {
   const itemsTotal = (order.item_list ?? []).reduce(
     (sum, item) => sum + (item.model_discounted_price ?? 0) * (item.model_quantity_purchased ?? 0),
-    0
+    0,
   );
   return itemsTotal - (order.voucher_from_seller ?? 0);
 }
@@ -30,7 +23,7 @@ export function aggregateRevenue(orders: ShopeeOrderDetail[]): RevenueData {
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const orderRows = orders
-    .map(o => ({
+    .map((o) => ({
       order_sn: o.order_sn,
       date: toMytDate(o.create_time),
       status: o.order_status,

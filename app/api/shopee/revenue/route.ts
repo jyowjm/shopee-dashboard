@@ -1,55 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { subMonths } from 'date-fns';
 import { callShopee } from '@/lib/shopee';
-import { fetchOrderSummaries } from '@/lib/orders';
+import { fetchOrderSummaries, fetchEscrowBatch } from '@/lib/orders';
+import { subOneMonthMyt } from '@/lib/datetime';
 import { aggregateRevenue } from './helpers';
-import type { ShopeeOrderDetail, ShopeeApiError } from '@/types/shopee';
-
-// Shopee timestamps are Unix seconds (UTC). MYT = UTC+8.
-const MYT_OFFSET_MS = 8 * 60 * 60 * 1000;
-
-// Subtract one calendar month from a Unix timestamp, keeping the MYT calendar date correct.
-function subOneMonthMyt(unixSeconds: number): number {
-  const mytDate = new Date(unixSeconds * 1000 + MYT_OFFSET_MS); // treat as MYT
-  const shifted = subMonths(mytDate, 1);
-  return Math.floor((shifted.getTime() - MYT_OFFSET_MS) / 1000);
-}
+import type { ShopeeOrderDetail } from '@/types/shopee';
+import type { ApiError } from '@/types/dashboard';
 
 const BATCH_SIZE = 50;
 
 async function fetchOrderDetails(orderSns: string[]): Promise<ShopeeOrderDetail[]> {
-  const details: ShopeeOrderDetail[] = [];
+  const batches: string[][] = [];
   for (let i = 0; i < orderSns.length; i += BATCH_SIZE) {
-    const batch = orderSns.slice(i, i + BATCH_SIZE);
-    const data = await callShopee<{ order_list: ShopeeOrderDetail[] }>(
-      '/api/v2/order/get_order_detail',
-      {
+    batches.push(orderSns.slice(i, i + BATCH_SIZE));
+  }
+  const responses = await Promise.all(
+    batches.map((batch) =>
+      callShopee<{ order_list: ShopeeOrderDetail[] }>('/api/v2/order/get_order_detail', {
         order_sn_list: batch.join(','),
         response_optional_fields: 'item_list,total_amount,order_status',
-      }
-    );
-    details.push(...(data.order_list ?? []));
-  }
-  return details;
+      }),
+    ),
+  );
+  return responses.flatMap((r) => r.order_list ?? []);
 }
 
-// Fetch seller voucher amounts from escrow endpoint (one call per order)
-async function fetchSellerVouchers(orderSns: string[]): Promise<Map<string, number>> {
-  const map = new Map<string, number>();
-  await Promise.all(
-    orderSns.map(async (sn) => {
-      try {
-        const data = await callShopee<{ order_income: { voucher_from_seller: number } }>(
-          '/api/v2/payment/get_escrow_detail',
-          { order_sn: sn }
-        );
-        map.set(sn, data.order_income?.voucher_from_seller ?? 0);
-      } catch {
-        map.set(sn, 0);
-      }
-    })
-  );
-  return map;
+async function fetchSellerVoucherMap(orderSns: string[]): Promise<Map<string, number>> {
+  const items = await fetchEscrowBatch(orderSns);
+  return new Map(items.map((i) => [i.order_sn, i.order_income.voucher_from_seller ?? 0]));
 }
 
 export async function GET(req: NextRequest) {
@@ -82,49 +59,45 @@ export async function GET(req: NextRequest) {
       fetchOrderSummaries(prevFrom, prevTo),
     ]);
 
-    const activeOrders = orders.filter(o => !['CANCELLED', 'IN_CANCEL'].includes(o.order_status));
-    const activePrevOrders = prevOrders.filter(o => !['CANCELLED', 'IN_CANCEL'].includes(o.order_status));
+    const activeOrders = orders.filter((o) => !['CANCELLED', 'IN_CANCEL'].includes(o.order_status));
+    const activePrevOrders = prevOrders.filter(
+      (o) => !['CANCELLED', 'IN_CANCEL'].includes(o.order_status),
+    );
 
     // Fetch order details for both periods in parallel
     const [details, prevDetails] = await Promise.all([
-      fetchOrderDetails(activeOrders.map(o => o.order_sn)),
-      fetchOrderDetails(activePrevOrders.map(o => o.order_sn)),
+      fetchOrderDetails(activeOrders.map((o) => o.order_sn)),
+      fetchOrderDetails(activePrevOrders.map((o) => o.order_sn)),
     ]);
 
     // Fetch seller vouchers for both periods in parallel — needed for apples-to-apples comparison
     const [sellerVouchers, prevSellerVouchers] = await Promise.all([
-      fetchSellerVouchers(details.map(d => d.order_sn)),
-      fetchSellerVouchers(prevDetails.map(d => d.order_sn)),
+      fetchSellerVoucherMap(details.map((d) => d.order_sn)),
+      fetchSellerVoucherMap(prevDetails.map((d) => d.order_sn)),
     ]);
 
     // Merge escrow voucher data into both periods
-    const detailsWithVouchers = details.map(d => ({
+    const detailsWithVouchers = details.map((d) => ({
       ...d,
       voucher_from_seller: sellerVouchers.get(d.order_sn) ?? 0,
     }));
 
-    const prevDetailsWithVouchers = prevDetails.map(d => ({
+    const prevDetailsWithVouchers = prevDetails.map((d) => ({
       ...d,
       voucher_from_seller: prevSellerVouchers.get(d.order_sn) ?? 0,
     }));
 
     const result = aggregateRevenue(detailsWithVouchers);
-
-    // Previous period revenue — identical calculation to current period
-    const prevRevenue = prevDetailsWithVouchers.reduce((sum, o) =>
-      sum + (o.item_list ?? []).reduce((s, item) =>
-        s + (item.model_discounted_price ?? 0) * (item.model_quantity_purchased ?? 0), 0
-      ) - (o.voucher_from_seller ?? 0), 0
-    );
+    const prevResult = aggregateRevenue(prevDetailsWithVouchers);
 
     return NextResponse.json({
       ...result,
       capped,
-      prev_total_revenue: prevRevenue,
+      prev_total_revenue: prevResult.total_revenue,
       prev_order_count: activePrevOrders.length,
     });
   } catch (err) {
-    const e = err as ShopeeApiError;
+    const e = err as ApiError;
     if (e.type === 'auth') return NextResponse.json({ error: e.message }, { status: 401 });
     if (e.type === 'rate_limit') return NextResponse.json({ error: e.message }, { status: 429 });
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

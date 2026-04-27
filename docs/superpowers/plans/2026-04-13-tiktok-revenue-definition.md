@@ -14,17 +14,18 @@
 
 ## File Map
 
-| File | Action | What changes |
-|------|--------|--------------|
-| `types/shopee.ts` | Modify | Add optional shipping fields to `RevenueData` |
-| `app/api/tiktok/revenue/route.ts` | Modify | Replace `calcOrderRevenue` with two functions; return shipping fields |
-| `components/RevenueSection.tsx` | Modify | Toggle, localStorage, dynamic label, tooltip, caption, chart data, table |
+| File                              | Action | What changes                                                             |
+| --------------------------------- | ------ | ------------------------------------------------------------------------ |
+| `types/shopee.ts`                 | Modify | Add optional shipping fields to `RevenueData`                            |
+| `app/api/tiktok/revenue/route.ts` | Modify | Replace `calcOrderRevenue` with two functions; return shipping fields    |
+| `components/RevenueSection.tsx`   | Modify | Toggle, localStorage, dynamic label, tooltip, caption, chart data, table |
 
 ---
 
 ## Task 1: Extend `RevenueData` with optional shipping fields
 
 **Files:**
+
 - Modify: `types/shopee.ts`
 
 These fields are optional so the Shopee route and existing `mergeRevenue` logic are not affected.
@@ -38,7 +39,13 @@ export interface RevenueData {
   total_revenue: number;
   order_count: number;
   daily: { date: string; revenue: number; shippingRevenue?: number }[];
-  orders: { order_sn: string; date: string; status: string; amount: number; shippingAmount?: number }[];
+  orders: {
+    order_sn: string;
+    date: string;
+    status: string;
+    amount: number;
+    shippingAmount?: number;
+  }[];
   capped: boolean;
   prev_total_revenue: number;
   prev_order_count: number;
@@ -68,6 +75,7 @@ git commit -m "types: add optional shipping fields to RevenueData for TikTok"
 ## Task 2: Update TikTok revenue API route
 
 **Files:**
+
 - Modify: `app/api/tiktok/revenue/route.ts`
 
 Replace the single `calcOrderRevenue` with two pure functions, update the daily/order tracking to capture both components, and include shipping totals in the JSON response. The `total_revenue` field stays as product-only for backward compat with `mergeRevenue` in the frontend.
@@ -96,9 +104,7 @@ function calcProductRevenue(o: {
  * Shipping Revenue = buyer's paid shipping fee (net of platform shipping discounts).
  * TikTok's payment.shipping_fee already reflects the net amount the buyer paid.
  */
-function calcShippingRevenue(o: {
-  payment?: { shipping_fee?: string };
-}): number {
+function calcShippingRevenue(o: { payment?: { shipping_fee?: string } }): number {
   return parseFloat(o.payment?.shipping_fee ?? '0') || 0;
 }
 ```
@@ -114,14 +120,20 @@ let totalShippingRevenue = 0;
 const orderRows: RevenueData['orders'] = [];
 
 for (const o of details) {
-  const product  = calcProductRevenue(o);
+  const product = calcProductRevenue(o);
   const shipping = calcShippingRevenue(o);
-  const date     = toMytDate(o.create_time);
-  const prev     = dailyMap.get(date) ?? { product: 0, shipping: 0 };
+  const date = toMytDate(o.create_time);
+  const prev = dailyMap.get(date) ?? { product: 0, shipping: 0 };
   dailyMap.set(date, { product: prev.product + product, shipping: prev.shipping + shipping });
-  totalProductRevenue  += product;
+  totalProductRevenue += product;
   totalShippingRevenue += shipping;
-  orderRows.push({ order_sn: o.id, date, status: o.status, amount: product, shippingAmount: shipping });
+  orderRows.push({
+    order_sn: o.id,
+    date,
+    status: o.status,
+    amount: product,
+    shippingAmount: shipping,
+  });
 }
 
 const daily = Array.from(dailyMap.entries())
@@ -136,10 +148,10 @@ orderRows.sort((a, b) => b.date.localeCompare(a.date));
 Replace the existing `const prevTotalRevenue = ...` line with:
 
 ```ts
-let prevTotalProductRevenue  = 0;
+let prevTotalProductRevenue = 0;
 let prevTotalShippingRevenue = 0;
 for (const o of prevDetails) {
-  prevTotalProductRevenue  += calcProductRevenue(o);
+  prevTotalProductRevenue += calcProductRevenue(o);
   prevTotalShippingRevenue += calcShippingRevenue(o);
 }
 ```
@@ -150,14 +162,14 @@ Replace the existing `result` object with:
 
 ```ts
 const result: RevenueData = {
-  total_revenue:               totalProductRevenue,   // product only — keeps mergeRevenue working
-  order_count:                 details.length,
+  total_revenue: totalProductRevenue, // product only — keeps mergeRevenue working
+  order_count: details.length,
   daily,
-  orders:                      orderRows,
+  orders: orderRows,
   capped,
-  prev_total_revenue:          prevTotalProductRevenue,
-  prev_order_count:            prevDetails.length,
-  total_shipping_revenue:      totalShippingRevenue,
+  prev_total_revenue: prevTotalProductRevenue,
+  prev_order_count: prevDetails.length,
+  total_shipping_revenue: totalShippingRevenue,
   prev_total_shipping_revenue: prevTotalShippingRevenue,
 };
 ```
@@ -192,6 +204,7 @@ git commit -m "feat(tiktok): split revenue into product + shipping components"
 ## Task 3: Add toggle, label, tooltip, and caption to RevenueSection
 
 **Files:**
+
 - Modify: `components/RevenueSection.tsx`
 
 This task adds the toggle (header), dynamic revenue label, ℹ tooltip, and formula caption to the revenue display. Chart and table wiring come in Task 4.
@@ -213,19 +226,25 @@ Add these derived constants between `useEffect` and the `if (loading)` check:
 
 ```tsx
 // Shipping fields are only present on TikTok responses
-const shippingRevenue     = (data as RevenueData & { total_shipping_revenue?: number })?.total_shipping_revenue ?? 0;
-const prevShippingRevenue = (data as RevenueData & { prev_total_shipping_revenue?: number })?.prev_total_shipping_revenue ?? 0;
-const showShipping        = platform === 'tiktok' && includeShipping;
-const displayRevenue      = (data?.total_revenue     ?? 0) + (showShipping ? shippingRevenue     : 0);
-const prevDisplayRevenue  = (data?.prev_total_revenue ?? 0) + (showShipping ? prevShippingRevenue : 0);
+const shippingRevenue =
+  (data as RevenueData & { total_shipping_revenue?: number })?.total_shipping_revenue ?? 0;
+const prevShippingRevenue =
+  (data as RevenueData & { prev_total_shipping_revenue?: number })?.prev_total_shipping_revenue ??
+  0;
+const showShipping = platform === 'tiktok' && includeShipping;
+const displayRevenue = (data?.total_revenue ?? 0) + (showShipping ? shippingRevenue : 0);
+const prevDisplayRevenue =
+  (data?.prev_total_revenue ?? 0) + (showShipping ? prevShippingRevenue : 0);
 
-const revenueLabel   = platform === 'tiktok' ? (includeShipping ? 'Gross revenue'   : 'Product revenue')   : 'Total revenue';
-const revenueCaption = platform === 'tiktok'
-  ? (includeShipping
+const revenueLabel =
+  platform === 'tiktok' ? (includeShipping ? 'Gross revenue' : 'Product revenue') : 'Total revenue';
+const revenueCaption =
+  platform === 'tiktok'
+    ? includeShipping
       ? 'MSRP − seller discounts + buyer shipping · excl. platform discounts'
-      : 'MSRP − seller discounts · excl. platform discounts & shipping')
-  : null;
-const tooltipLayman  = includeShipping
+      : 'MSRP − seller discounts · excl. platform discounts & shipping'
+    : null;
+const tooltipLayman = includeShipping
   ? 'Everything customers paid us — products and shipping — before TikTok subsidised anything.'
   : 'What customers paid us for the products, before TikTok subsidised anything.';
 const tooltipFormula = includeShipping
@@ -236,17 +255,21 @@ const tooltipFormula = includeShipping
 - [ ] **Step 3: Replace the static section header with a flex row containing the toggle**
 
 Replace the current `<h2>` line:
+
 ```tsx
 <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-4">Revenue</h2>
 ```
 
 With:
+
 ```tsx
 <div className="flex items-center justify-between mb-4">
   <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Revenue</h2>
   {platform === 'tiktok' && (
     <div className="flex items-center gap-1.5">
-      <span className={`text-xs font-semibold ${!includeShipping ? 'text-orange-600' : 'text-gray-400'}`}>
+      <span
+        className={`text-xs font-semibold ${!includeShipping ? 'text-orange-600' : 'text-gray-400'}`}
+      >
         Product
       </span>
       <button
@@ -266,7 +289,9 @@ With:
           }`}
         />
       </button>
-      <span className={`text-xs font-semibold ${includeShipping ? 'text-orange-600' : 'text-gray-400'}`}>
+      <span
+        className={`text-xs font-semibold ${includeShipping ? 'text-orange-600' : 'text-gray-400'}`}
+      >
         + Ship
       </span>
     </div>
@@ -282,24 +307,32 @@ Replace the first `<div>` inside `<div className="flex gap-8 mb-6">` (the revenu
 <div>
   <div className="flex items-start gap-2">
     <p className="text-3xl font-bold text-gray-900">RM {displayRevenue.toFixed(2)}</p>
-    {data && <DeltaBadge current={displayRevenue} previous={prevDisplayRevenue} periodLabel={periodLabel} />}
+    {data && (
+      <DeltaBadge
+        current={displayRevenue}
+        previous={prevDisplayRevenue}
+        periodLabel={periodLabel}
+      />
+    )}
   </div>
   <div className="flex items-center gap-1 mt-1">
     <p className="text-sm text-gray-500">{revenueLabel}</p>
     {platform === 'tiktok' && (
       <div className="relative group">
-        <span className="text-xs text-gray-300 cursor-default border-b border-dotted border-gray-300 leading-none">ℹ</span>
+        <span className="text-xs text-gray-300 cursor-default border-b border-dotted border-gray-300 leading-none">
+          ℹ
+        </span>
         <div className="absolute left-5 top-0 z-10 hidden group-hover:block w-60 bg-gray-900 text-white rounded-lg p-3 text-xs shadow-xl">
           <p className="font-semibold mb-1.5">💡 What is {revenueLabel}?</p>
           <p className="text-gray-300 mb-2 leading-relaxed">{tooltipLayman}</p>
-          <p className="text-gray-500 border-t border-gray-700 pt-2 leading-relaxed">{tooltipFormula}</p>
+          <p className="text-gray-500 border-t border-gray-700 pt-2 leading-relaxed">
+            {tooltipFormula}
+          </p>
         </div>
       </div>
     )}
   </div>
-  {revenueCaption && (
-    <p className="text-xs text-gray-300 italic mt-0.5">{revenueCaption}</p>
-  )}
+  {revenueCaption && <p className="text-xs text-gray-300 italic mt-0.5">{revenueCaption}</p>}
 </div>
 ```
 
@@ -310,6 +343,7 @@ npx tsc --noEmit
 ```
 
 Then open `http://localhost:3000` in the browser with "TikTok Shop" selected:
+
 - Toggle should appear top-right of the Revenue card
 - Label below the RM number should read "Product revenue"
 - ℹ tooltip should appear on hover
@@ -327,6 +361,7 @@ git commit -m "feat(tiktok): add shipping toggle, label, tooltip, and caption to
 ## Task 4: Wire toggle to chart and breakdown table
 
 **Files:**
+
 - Modify: `components/RevenueSection.tsx`
 
 - [ ] **Step 1: Add `chartData` to the derived values block and update the LineChart**
@@ -334,17 +369,20 @@ git commit -m "feat(tiktok): add shipping toggle, label, tooltip, and caption to
 At the **end** of the derived values block added in Task 3 Step 2 (after the `tooltipFormula` constant, before the `if (loading)` check), add:
 
 ```tsx
-const chartData = (data?.daily ?? []).map(d => ({
+const chartData = (data?.daily ?? []).map((d) => ({
   ...d,
   revenue: d.revenue + (showShipping ? (d.shipping_revenue ?? 0) : 0),
 }));
 ```
 
 Then change the `<LineChart>` opening tag from:
+
 ```tsx
 <LineChart data={data?.daily ?? []}>
 ```
+
 to:
+
 ```tsx
 <LineChart data={chartData}>
 ```
@@ -354,6 +392,7 @@ to:
 - [ ] **Step 2: Update the breakdown table column header and row amounts**
 
 In the breakdown `<table>`, replace the `<th>` for the amount column:
+
 ```tsx
 // Before
 <th className="pb-2 font-medium text-right">Amount</th>
@@ -365,6 +404,7 @@ In the breakdown `<table>`, replace the `<th>` for the amount column:
 ```
 
 Replace the row amount cell:
+
 ```tsx
 // Before
 <td className="py-2 text-right font-medium">RM {o.amount.toFixed(2)}</td>
@@ -376,6 +416,7 @@ Replace the row amount cell:
 ```
 
 Replace the tfoot total cell:
+
 ```tsx
 // Before
 <td className="pt-2 text-right font-bold text-gray-900">RM {data!.total_revenue.toFixed(2)}</td>
